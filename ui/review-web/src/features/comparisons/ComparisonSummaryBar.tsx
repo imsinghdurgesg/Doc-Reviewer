@@ -166,14 +166,15 @@ export function ComparisonSummaryBar({ detail, findings }: ComparisonSummaryBarP
         </Tooltip>
       </Stack>
 
-      {/* Stated inline rather than left to a tooltip: a partial review presented as a complete one is
-          the failure mode §18.4 exists to prevent. */}
-      {incomplete && (
-        <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
-          {total - evaluated} of {total} requirements could not be evaluated. Treat this as an
-          incomplete review — an absent finding here does not mean compliance.
-        </Alert>
-      )}
+      {/* NOT repeated here.
+          The workspace already shows this warning above the bar, and it NAMES the affected controls
+          with their real reasons — strictly more useful than a count. Three copies of the same
+          sentence on one screen (here, the workspace alert, and the coverage panel) pushed the
+          side-by-side view off screen entirely, and repetition does not add emphasis; it costs the
+          space the reviewer needs to read the evidence.
+
+          The warning still cannot be missed: the amber percentage chip beside the count carries the
+          same meaning in a tooltip, and the coverage panel breaks the shortfall down per requirement. */}
 
       {counts.actionable === 0 && !incomplete && findings.length > 0 && (
         <Alert severity="success" sx={{ mt: 1, py: 0 }}>

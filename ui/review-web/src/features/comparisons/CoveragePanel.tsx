@@ -140,6 +140,13 @@ export function CoveragePanel({ coverage, exempt, inProgress }: {
   /** True while the comparison is still running, so absent coverage is expected rather than wrong. */
   inProgress?: boolean | undefined;
 }) {
+  // Opens itself when there is a gap or an unresolved scope question, so the case that matters is not
+  // hidden behind an interaction. Otherwise closed: the evidence panes are what a reviewer came for.
+  const needsAttention = Boolean(
+    coverage && (coverage.notEvaluated > 0 || coverage.applicabilityReviewRequired > 0),
+  );
+  const [open, setOpen] = useState(needsAttention);
+
   // THREE DISTINCT ABSENCES, and conflating any two of them misinforms the reviewer.
   //
   // Absent is never "zero gaps": rendering a missing ledger as a clean summary would assert coverage
@@ -186,10 +193,48 @@ export function CoveragePanel({ coverage, exempt, inProgress }: {
 
   return (
     <Box sx={{ border: `1px solid ${palette.border}`, borderRadius: 1 }}>
-      <Box sx={{ p: 2 }}>
-        <Typography sx={overlineLabel}>Requirement coverage</Typography>
+      {/* COLLAPSED BY DEFAULT, unless something needs attention.
+          Expanded, this panel is ~9 rows plus a per-requirement list, which pushed the side-by-side
+          evidence view off screen — and the evidence is what a reviewer came for. The one-line
+          summary carries the whole claim; the breakdown is one click away.
 
-        <Stack sx={{ mt: 1 }}>
+          It opens itself when there is a gap or an unresolved applicability question, so the case
+          that matters is never behind an interaction the reviewer has to discover. */}
+      <Box
+        component="button"
+        onClick={() => setOpen((v) => !v)}
+        sx={{
+          width: "100%", textAlign: "left", cursor: "pointer", background: "none", border: 0,
+          font: "inherit", color: "inherit", p: 2, display: "flex", gap: 1, alignItems: "center",
+          "&:hover": { bgcolor: palette.chrome },
+        }}
+      >
+        <ExpandMoreIcon
+          fontSize="small"
+          sx={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 120ms",
+                color: palette.muted, flexShrink: 0 }}
+        />
+        <Typography sx={overlineLabel}>Requirement coverage</Typography>
+        {/* The denominator FIRST, as the summary bar does: "186 compared" alone is meaningless
+            without knowing how many were expected. */}
+        <Typography sx={{ fontSize: 12.5, color: "#5c6a63" }}>
+          {coverage.compared} of {coverage.totalRequirements} compared
+          {coverage.notApplicable > 0 && ` · ${coverage.notApplicable} not applicable`}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        {coverage.applicabilityReviewRequired > 0 && (
+          <Chip size="small" color="warning" variant="outlined"
+            label={`${coverage.applicabilityReviewRequired} scope unclear`} />
+        )}
+        {coverage.notEvaluated > 0 && (
+          <Chip size="small" color="error"
+            label={`${coverage.notEvaluated} not evaluated`} />
+        )}
+      </Box>
+
+      <Collapse in={open} unmountOnExit>
+      <Box sx={{ px: 2, pb: 2 }}>
+        <Stack>
           <CountRow label="Total requirements" value={coverage.totalRequirements} strong />
 
           {/* Compared, with its two components indented beneath it. The three disjoint categories —
@@ -223,15 +268,9 @@ export function CoveragePanel({ coverage, exempt, inProgress }: {
         Only for a real gap. A complete review needs no reassurance banner, and one on every
         comparison would dilute the case where it means something.
       */}
-      {coverage.notEvaluated > 0 && (
-        <Box sx={{ px: 2, pb: 2 }}>
-          <Alert severity="warning" sx={{ fontSize: 12.5 }}>
-            {coverage.notEvaluated === 1
-              ? "1 requirement was not evaluated and is not reflected in the conclusion."
-              : `${coverage.notEvaluated} requirements were not evaluated and are not reflected in the conclusion.`}
-          </Alert>
-        </Box>
-      )}
+      {/* NOT an alert here. The "Not evaluated" row is already red and non-zero, and each affected
+          requirement states "not included in the comparison conclusion" when expanded. A banner
+          restating the same count was the fourth copy of one sentence on this screen. */}
 
       {coverage.uncovered.length > 0 && (
         <>
@@ -254,6 +293,7 @@ export function CoveragePanel({ coverage, exempt, inProgress }: {
           </Box>
         </>
       )}
+      </Collapse>
     </Box>
   );
 }

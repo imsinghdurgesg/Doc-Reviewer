@@ -271,7 +271,23 @@ export function ComparisonWorkspace() {
               The affected controls are NAMED, not just counted. A reviewer told only "1 of 15 could
               not be evaluated" cannot judge whether the gap matters — the missing control might be
               the one the review was for. Naming it makes the limitation bounded and checkable. */}
-          <Alert severity="warning">
+          {/* Rerun HERE too, not only on FAILED. A single rejected requirement lands the review in
+              PARTIALLY_COMPLETED, which is the common case — the reviewer's remedy is the same
+              (run it again), and offering it only on total failure meant the state they actually
+              encounter had no action at all. */}
+          <Alert
+            severity="warning"
+            action={
+              <Button
+                size="small"
+                color="inherit"
+                disabled={rerun.isPending}
+                onClick={() => rerun.mutate()}
+              >
+                {rerun.isPending ? "Starting…" : "Rerun"}
+              </Button>
+            }
+          >
             <AlertTitle sx={{ mb: unevaluated.length > 0 ? 0.5 : 0 }}>
               {detail.stateMessage}
             </AlertTitle>
