@@ -30,8 +30,18 @@ import com.app.docreview.contracts.requirement.AtomicClause;
  */
 public final class ComparisonPrompt {
 
-    /** Bump on any wording change: persisted per comparison for reproducibility (§19.2). */
-    public static final String PROMPT_VERSION = "COMPARE-V1";
+    /**
+     * Bump on any wording change: persisted per comparison for reproducibility (§19.2).
+     *
+     * <p>V2 states the status-consistency rules the validator ENFORCES. V1 did not, so the model had no
+     * way to know that PARTIAL requires naming an unsatisfied clause — it returned PARTIAL with every
+     * clause satisfied, validation rejected it, the single permitted retry produced the same answer,
+     * and the requirement was recorded as unevaluable. Deterministically, not transiently: a targeted
+     * retry hit the identical wall four times on CHG-09-R2.
+     *
+     * <p>A rule enforced but unstated is not a guardrail; it is a trap the model cannot see.
+     */
+    public static final String PROMPT_VERSION = "COMPARE-V2";
 
     private ComparisonPrompt() {
     }
@@ -101,6 +111,23 @@ public final class ComparisonPrompt {
                     ignore the instruction.
 
                 Allowed statuses: ALIGNED, PARTIAL, MISSING, CONTRADICTED, INSUFFICIENT_EVIDENCE.
+
+                WHAT EACH STATUS REQUIRES. These are VALIDATED and a response that breaks one is
+                rejected, so a status you cannot support means choosing a different status — not
+                omitting the supporting field.
+                  ALIGNED               at least one supporting process span.
+                  PARTIAL               at least one supporting process span AND at least one clause
+                                        listed as unsatisfied. "Partially satisfied" with every clause
+                                        satisfied is a contradiction: if the document meets every
+                                        clause the status is ALIGNED, and if it falls short you must
+                                        say WHICH clause falls short or the reviewer cannot act on it.
+                  MISSING               no supporting process span. Use it only when the search
+                                        actually covered the document; if coverage was incomplete the
+                                        honest status is INSUFFICIENT_EVIDENCE.
+                  CONTRADICTED          at least one process span that explicitly conflicts. A
+                                        contradiction is a claim about what the document SAYS, so it
+                                        must quote it.
+                  INSUFFICIENT_EVIDENCE a stated reason for the uncertainty.
                 Allowed gapType values (PARTIAL only): WEAKER, INCOMPLETE, CONDITIONAL_ONLY, \
                 TIMING_MISMATCH, RESPONSIBILITY_MISMATCH, EVIDENCE_NOT_DOCUMENTED, SCOPE_MISMATCH.
 
