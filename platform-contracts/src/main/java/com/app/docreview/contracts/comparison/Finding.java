@@ -71,8 +71,35 @@ public record Finding(
          *
          * <p>Null on findings recorded before overrides existed.
          */
-        String applicabilityDecidedBy
+        String applicabilityDecidedBy,
+
+        /**
+         * When this finding was produced by a TARGETED RETRY, and under what versions. §19.2.
+         *
+         * <p><strong>Why a per-finding stamp exists at all.</strong> A comparison records one set of
+         * prompt, model and override versions, taken at completion. Retrying a single failed
+         * requirement later may run under different ones — a newer model alias, a confirmed governance
+         * override — so an amended comparison can contain findings from two provenance sets while its
+         * header claims one.
+         *
+         * <p>Null on every finding from the original run, which is the overwhelming majority. A
+         * non-null value is the honest signal that this particular row was produced separately, and
+         * carries the versions that produced it so a reader can tell how it differs.
+         */
+        RetryProvenance retriedAs
 ) {
+
+    /**
+     * The versions a retried finding actually ran under.
+     *
+     * @param at             when the retry ran
+     * @param promptVersion  the comparison prompt in force at retry time
+     * @param modelAlias     the model that produced it
+     * @param overrideBatch  the governance override set applied, if any
+     */
+    public record RetryProvenance(java.time.Instant at, String promptVersion, String modelAlias,
+                                  String overrideBatch) {
+    }
 
     /**
      * §18.6: only these four statuses produce a finding a reviewer must act on.

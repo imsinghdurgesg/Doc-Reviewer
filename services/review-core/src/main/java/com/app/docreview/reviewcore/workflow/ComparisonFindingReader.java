@@ -66,6 +66,29 @@ public class ComparisonFindingReader {
     }
 
     /**
+     * Asks the worker to re-evaluate ONE failed requirement. Architecture §18.4.
+     *
+     * <p>Returns false when the retry produced nothing, so the caller can say so rather than implying a
+     * recovery that did not happen. A 409 from the worker is that case, not an error.
+     */
+    public boolean retryRequirement(String comparisonId, String requirementId) {
+        try {
+            retrievalComparison.post()
+                    .uri("/internal/v1/comparison/{comparisonId}/requirements/{requirementId}/retry",
+                            comparisonId, requirementId)
+                    .retrieve()
+                    .toBodilessEntity();
+            return true;
+        } catch (Exception e) {
+            // Type only (§35). Includes the 409 the worker returns when the retry failed again — a
+            // legitimate outcome, so this is info rather than error.
+            log.info("Retry of requirement {} in comparison {} did not succeed ({})",
+                    requirementId, comparisonId, e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    /**
      * Reads the coverage ledger, or null when the worker has none. Architecture §17.6.
      *
      * <p>Null on any failure, including a 404. A missing ledger is materially different from an empty

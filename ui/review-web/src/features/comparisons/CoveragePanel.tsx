@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Alert, Box, Chip, CircularProgress, Collapse, Divider, Stack, Typography,
+  Alert, Box, Button, Chip, CircularProgress, Collapse, Divider, Stack, Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
@@ -62,7 +62,16 @@ function CountRow({ label, value, emphasis, indent, strong }: {
 }
 
 /** One requirement that was not plainly evaluated, expandable to its reason. */
-function EntryRow({ entry }: { entry: CoverageEntry }) {
+function EntryRow({ entry, onRetry, retrying }: {
+  entry: CoverageEntry;
+  /**
+   * Re-evaluates just this requirement. Absent for entries where retrying is meaningless — a
+   * NOT_APPLICABLE row is a decision, not a failure, and offering to retry it would suggest the
+   * decision was a fault.
+   */
+  onRetry?: (() => void) | undefined;
+  retrying?: boolean | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const gap = isCoverageGap(entry);
 
@@ -113,9 +122,20 @@ function EntryRow({ entry }: { entry: CoverageEntry }) {
             misreading §17.6 exists to prevent.
           */}
           {gap && (
-            <Typography sx={{ fontSize: 12.5, mt: 1, fontStyle: "italic", color: "#a8323a" }}>
-              This requirement was not included in the comparison conclusion.
-            </Typography>
+            <Stack direction="row" spacing={1.5}
+              sx={{ mt: 1, alignItems: "center", flexWrap: "wrap" }}>
+              <Typography sx={{ fontSize: 12.5, fontStyle: "italic", color: "#a8323a" }}>
+                This requirement was not included in the comparison conclusion.
+              </Typography>
+              {/* Retries THIS requirement only — one model call rather than the whole comparison.
+                  A rejected verdict is usually a per-call inconsistency, so the same requirement
+                  often succeeds on a second attempt. */}
+              {onRetry && (
+                <Button size="small" variant="outlined" disabled={retrying} onClick={onRetry}>
+                  {retrying ? "Retrying…" : "Retry this requirement"}
+                </Button>
+              )}
+            </Stack>
           )}
           {entry.state === "UNCERTAIN_APPLICABILITY" && (
             <Typography sx={{ fontSize: 12.5, mt: 1, color: "#5c6a63" }}>
@@ -133,12 +153,16 @@ function EntryRow({ entry }: { entry: CoverageEntry }) {
   );
 }
 
-export function CoveragePanel({ coverage, exempt, inProgress }: {
+export function CoveragePanel({ coverage, exempt, inProgress, onRetry, retryingId }: {
   coverage: CoverageSummary | null | undefined;
   /** True when this comparison predates coverage tracking. Server-stated, never inferred. */
   exempt?: boolean | undefined;
   /** True while the comparison is still running, so absent coverage is expected rather than wrong. */
   inProgress?: boolean | undefined;
+  /** Re-evaluates one requirement. Omitted where retrying is not offered. */
+  onRetry?: ((requirementId: string) => void) | undefined;
+  /** The requirement currently being retried, so only its own button shows progress. */
+  retryingId?: string | null | undefined;
 }) {
   // Opens itself when there is a gap or an unresolved scope question, so the case that matters is not
   // hidden behind an interaction. Otherwise closed: the evidence panes are what a reviewer came for.
@@ -288,7 +312,16 @@ export function CoveragePanel({ coverage, exempt, inProgress }: {
             {[...coverage.uncovered]
               .sort((a, b) => Number(isCoverageGap(b)) - Number(isCoverageGap(a)))
               .map((entry) => (
-                <EntryRow key={`${entry.standardVersionId}-${entry.requirementId}`} entry={entry} />
+                <EntryRow
+                  key={`${entry.standardVersionId}-${entry.requirementId}`}
+                  entry={entry}
+                  // Only for a genuine gap. NOT_APPLICABLE and UNCERTAIN are decisions, and retrying
+                  // them would imply the decision was a failure.
+                  onRetry={onRetry && isCoverageGap(entry)
+                    ? () => onRetry(entry.requirementId)
+                    : undefined}
+                  retrying={retryingId === entry.requirementId}
+                />
               ))}
           </Box>
         </>

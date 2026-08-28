@@ -50,7 +50,8 @@ class ComparisonVisibilityTest {
                 comparisons,
                 Mockito.mock(UploadedDocumentRepository.class),
                 Mockito.mock(StandardVersionRepository.class),
-                Mockito.mock(JobDispatcher.class));
+                Mockito.mock(JobDispatcher.class),
+                Mockito.mock(com.app.docreview.reviewcore.workflow.ComparisonFindingReader.class));
     }
 
     private void stored(String publicId, String createdBy) {

@@ -90,7 +90,7 @@ class ApplicabilityWorkflowTest {
         return new Finding("f-" + requirementId, "CMP-1", "v-1", "rs-1", requirementId,
                 null, "Title", status, null, null,
                 List.of("s-1"), List.of("p-1"), List.of(), List.of(),
-                "reason", null, 0.9, false, ApplicabilityStatus.APPLICABLE, null, null);
+                "reason", null, 0.9, false, ApplicabilityStatus.APPLICABLE, null, null, null);
     }
 
     private RequirementApplicabilityCoordinator coordinator() {

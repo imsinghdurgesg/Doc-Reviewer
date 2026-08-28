@@ -34,12 +34,17 @@ import type { ComparisonDetail, ComparisonStatus, Finding } from "@/models/compa
 export interface ComparisonSummaryBarProps {
   detail: ComparisonDetail;
   findings: readonly Finding[];
+  /** Re-evaluates one requirement in place. Passed through to the coverage panel. */
+  onRetryRequirement?: ((requirementId: string) => void) | undefined;
+  retryingRequirementId?: string | null | undefined;
 }
 
 /** Statuses that represent work for a human, as opposed to a clean pass or an open question. */
 const ACTIONABLE: readonly ComparisonStatus[] = ["CONTRADICTED", "PARTIAL", "MISSING"];
 
-export function ComparisonSummaryBar({ detail, findings }: ComparisonSummaryBarProps) {
+export function ComparisonSummaryBar({
+  detail, findings, onRetryRequirement, retryingRequirementId,
+}: ComparisonSummaryBarProps) {
   const [legendOpen, setLegendOpen] = useState(false);
 
   const counts = useMemo(() => {
@@ -221,6 +226,8 @@ export function ComparisonSummaryBar({ detail, findings }: ComparisonSummaryBarP
           coverage={detail.coverage}
           exempt={detail.coverageExempt}
           inProgress={isComparisonRunning(detail)}
+          onRetry={onRetryRequirement}
+          retryingId={retryingRequirementId}
         />
       </Box>
     </Box>

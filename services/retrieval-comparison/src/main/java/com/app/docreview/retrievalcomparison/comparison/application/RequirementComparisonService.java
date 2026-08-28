@@ -207,7 +207,9 @@ public class RequirementComparisonService {
                 // no call at all for the unconditional majority.
                 applicability.status(),
                 applicability.reason(),
-                applicability.decidedBy());
+                applicability.decidedBy(),
+                // Null: this is the ORIGINAL run. A retry stamps its own provenance (§19.2).
+                null);
     }
 
     /**
@@ -422,7 +424,9 @@ public class RequirementComparisonService {
                     // Preserved from the existing finding: merging duplicate findings for one
                     // requirement must not change whether that requirement applied, or what decided it.
                     existing.applicabilityStatus(), existing.applicabilityReason(),
-                    existing.applicabilityDecidedBy()));
+                    existing.applicabilityDecidedBy(),
+                    // Preserved: merging duplicates must not erase that a finding was retried.
+                    existing.retriedAs()));
         }
         return List.copyOf(byKey.values());
     }

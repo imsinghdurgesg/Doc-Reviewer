@@ -102,6 +102,29 @@ export function ComparisonWorkspace() {
     },
   });
 
+  /**
+   * Re-evaluates one requirement in place.
+   *
+   * Stays on THIS comparison, unlike a full rerun: the amendment lands in the record the reviewer is
+   * already reading, so refetching is the right response rather than navigating away.
+   */
+  const [retryingRequirementId, setRetryingRequirementId] = useState<string | null>(null);
+  const retryRequirement = useMutation({
+    mutationFn: (requirementId: string) => {
+      setRetryingRequirementId(requirementId);
+      return apiClient.post<ComparisonDetail>(
+        `/comparisons/${comparisonId}/requirements/${requirementId}/retry`,
+      );
+    },
+    onSettled: () => setRetryingRequirementId(null),
+    onSuccess: () => {
+      // Refetch rather than trusting the response body: coverage and state may both have changed, and
+      // one source of truth for the rendered comparison avoids the two disagreeing.
+      void comparison.refetch();
+      void queryClient.invalidateQueries({ queryKey: ["comparisons"] });
+    },
+  });
+
   const evidence = useQuery({
     queryKey: ["evidence", comparisonId, selectedFinding?.findingId],
     queryFn: () =>
@@ -335,7 +358,12 @@ export function ComparisonWorkspace() {
         </Box>
       )}
 
-      <ComparisonSummaryBar detail={detail} findings={activeReference?.findings ?? []} />
+      <ComparisonSummaryBar
+        detail={detail}
+        findings={activeReference?.findings ?? []}
+        onRetryRequirement={(id) => retryRequirement.mutate(id)}
+        retryingRequirementId={retryingRequirementId}
+      />
 
       <ViewerControlBar
         zoom={shell.zoom}

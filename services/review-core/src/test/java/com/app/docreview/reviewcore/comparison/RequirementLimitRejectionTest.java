@@ -55,7 +55,8 @@ class RequirementLimitRejectionTest {
         documents = Mockito.mock(UploadedDocumentRepository.class);
         standardVersions = Mockito.mock(StandardVersionRepository.class);
         jobDispatcher = Mockito.mock(JobDispatcher.class);
-        service = new ComparisonService(comparisons, documents, standardVersions, jobDispatcher);
+        service = new ComparisonService(comparisons, documents, standardVersions, jobDispatcher,
+                Mockito.mock(com.app.docreview.reviewcore.workflow.ComparisonFindingReader.class));
         set(service, "maxRequirementsPerComparison", LIMIT);
 
         var document = Mockito.mock(UploadedDocument.class);

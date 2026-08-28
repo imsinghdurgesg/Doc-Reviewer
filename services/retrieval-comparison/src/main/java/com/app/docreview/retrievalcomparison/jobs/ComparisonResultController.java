@@ -1,6 +1,8 @@
 package com.app.docreview.retrievalcomparison.jobs;
 
 import com.app.docreview.contracts.comparison.CoverageLedger;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PostMapping;
 import com.app.docreview.contracts.comparison.Finding;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,12 +35,48 @@ import java.util.List;
 public class ComparisonResultController {
 
     private final ComparisonResultWriter resultWriter;
+    private final ComparisonJobRunner comparisonRunner;
+    private final WorkerJobRepository jobs;
 
     @GetMapping("/{comparisonId}/findings")
     public List<Finding> findings(@PathVariable String comparisonId) {
         var findings = resultWriter.read(comparisonId);
         log.debug("Serving {} finding(s) for comparison {}", findings.size(), comparisonId);
         return findings;
+    }
+
+    /**
+     * Re-evaluates ONE failed requirement and amends the comparison. Architecture §18.4, §19.2.
+     *
+     * <p>1 model call instead of the 187 a full rerun costs, and the reviewer keeps the comparison they
+     * were already reading rather than being handed a new one to re-read.
+     *
+     * <p>The amended finding is STAMPED with the versions it ran under, because the comparison's header
+     * records the versions of its original run. Without the stamp a reader could not tell why one
+     * finding differs from its neighbours.
+     *
+     * <p>The coverage ledger is rebuilt so the recovery is reflected: leaving it would show the
+     * requirement as untested while a finding for it exists, which is the contradiction §17.6 exists to
+     * prevent — in the opposite direction.
+     *
+     * <p>409 when the retry produces nothing. The requirement stays untested and its coverage row stays
+     * PENDING, which is the honest outcome; a 200 would imply a recovery that did not happen.
+     */
+    @PostMapping("/{comparisonId}/requirements/{requirementId}/retry")
+    public ResponseEntity<Finding> retryRequirement(@PathVariable String comparisonId,
+                                                    @PathVariable String requirementId) {
+        var job = jobs.findFirstByComparisonIdOrderByClaimedAtDesc(comparisonId).orElse(null);
+        if (job == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        var retried = comparisonRunner.retryRequirement(job, requirementId);
+        if (retried.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
+
+        comparisonRunner.rebuildCoverage(job);
+        return ResponseEntity.ok(retried.get());
     }
 
     /**

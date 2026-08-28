@@ -726,6 +726,100 @@ public class ComparisonJobRunner {
     }
 
     /** One requirement: retrieve, compare, and classify the result. Never throws (§18.4). */
+    /**
+     * Rebuilds and re-persists the coverage ledger after a targeted retry. Architecture §17.6.
+     *
+     * <p>Built from the CURRENT findings, so a recovered requirement moves from untested to evaluated.
+     * Leaving the old ledger would report a requirement as never attempted while a finding for it
+     * exists — the §17.6 contradiction inverted, and just as misleading.
+     */
+    public void rebuildCoverage(WorkerJob job) {
+        var loaded = loadRequirements(job.getStandardVersionIds());
+        var expected = new ArrayList<>(loaded.evaluated());
+        expected.addAll(loaded.dropped());
+
+        var findings = resultWriter.read(job.getComparisonId());
+        // No failed set and no skip reasons: a requirement with no finding is simply still untested,
+        // and inventing a reason here would assert a cause nobody established.
+        var ledger = coverageLedgerService.build(
+                job.getComparisonId(), expected, findings, java.util.Set.of(), Map.of());
+        resultWriter.writeLedger(ledger);
+    }
+
+    /**
+     * Re-evaluates ONE requirement that failed, without redoing the rest. Architecture §18.4, §19.2.
+     *
+     * <p><strong>Why targeted.</strong> A comparison over three standards is 187 model calls. When a
+     * single requirement is rejected — the model's verdict contradicting the evidence it cited, which
+     * is a per-call inconsistency and usually transient — repeating all 187 to recover one is 186 calls
+     * of pure waste, and it produces a whole new comparison the reviewer then has to re-read.
+     *
+     * <p><strong>Runs the identical path.</strong> Same applicability decision, same retrieval, same
+     * comparison and validation as {@link #evaluateOne}. A retry that took a shortcut would produce a
+     * finding not comparable with its neighbours, which is worse than not retrying.
+     *
+     * <p>Returns empty when the retry fails again: the requirement stays untested and its coverage row
+     * stays PENDING, which is the honest outcome. A retry is an attempt, not a guarantee.
+     */
+    public java.util.Optional<Finding> retryRequirement(WorkerJob job, String requirementId) {
+        var processSpans = spanReader.allForVersion(job.getDocumentVersionId());
+        if (processSpans.isEmpty()) {
+            log.warn("Cannot retry {} for comparison {}: the document has no evidence spans",
+                    requirementId, job.getComparisonId());
+            return java.util.Optional.empty();
+        }
+        int chunkCount = spanReader.chunksForVersion(job.getDocumentVersionId()).size();
+
+        // Loaded from the SAME sets the original run used, resolved the same way — the newest
+        // VALIDATED set per standard. A retry against a different set would silently be measuring a
+        // different requirement than the one that failed.
+        var loaded = loadRequirements(job.getStandardVersionIds());
+        var requirement = loaded.evaluated().stream()
+                .filter(r -> requirementId.equals(r.getRequirementId()))
+                .findFirst()
+                .orElse(null);
+        if (requirement == null) {
+            log.warn("Cannot retry {} for comparison {}: not in the current requirement sets",
+                    requirementId, job.getComparisonId());
+            return java.util.Optional.empty();
+        }
+
+        var outcome = evaluateOne(job, requirement, processSpans, chunkCount);
+        if (outcome.finding() == null) {
+            // Counts and ids only, never requirement text (§35).
+            log.info("Retry of {} for comparison {} did not produce a finding",
+                    requirementId, job.getComparisonId());
+            return java.util.Optional.empty();
+        }
+
+        // STAMPED as a retry. The comparison's header records the versions of its original run, so an
+        // amended finding that carried no marker would be indistinguishable from one produced then —
+        // and a reader comparing it against its neighbours could not tell why it differs.
+        var stamped = withRetryProvenance(outcome.finding());
+        resultWriter.appendFinding(stamped);
+        log.info("Retried {} for comparison {}: {}",
+                requirementId, job.getComparisonId(), stamped.status());
+        return java.util.Optional.of(stamped);
+    }
+
+    /** Copies a finding with its retry provenance recorded. */
+    private Finding withRetryProvenance(Finding f) {
+        var provenance = new Finding.RetryProvenance(
+                Instant.now(),
+                ComparisonPrompt.PROMPT_VERSION,
+                properties.models().comparison(),
+                // The override batch that actually decided applicability, already resolved per
+                // requirement — reused rather than re-derived so the two cannot disagree.
+                f.applicabilityDecidedBy());
+        return new Finding(f.findingId(), f.comparisonId(), f.standardVersionId(),
+                f.requirementSetVersion(), f.requirementId(), f.parentControlId(),
+                f.requirementTitle(), f.status(), f.gapType(), f.severity(),
+                f.standardSpanIds(), f.processSpanIds(), f.nearestProcessSpanIds(),
+                f.clauseResults(), f.reason(), f.recommendedAction(), f.confidence(),
+                f.needsHumanReview(), f.applicabilityStatus(), f.applicabilityReason(),
+                f.applicabilityDecidedBy(), provenance);
+    }
+
     private UnitOutcome evaluateOne(
             WorkerJob job,
             StandardRequirementDocument requirement,

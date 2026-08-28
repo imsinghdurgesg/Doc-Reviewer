@@ -47,7 +47,7 @@ class CoverageLedgerServiceTest {
                 "reason", null, 0.9, false,
                 // Applicability is not what this test is about; APPLICABLE is the default and the
                 // state every compared requirement is in.
-                com.app.docreview.contracts.enums.ApplicabilityStatus.APPLICABLE, null, null);
+                com.app.docreview.contracts.enums.ApplicabilityStatus.APPLICABLE, null, null, null);
     }
 
     @Nested

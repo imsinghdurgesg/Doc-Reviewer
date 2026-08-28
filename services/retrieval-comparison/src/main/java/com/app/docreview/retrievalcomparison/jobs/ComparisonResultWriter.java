@@ -53,6 +53,25 @@ public class ComparisonResultWriter {
         log.info("Stored {} finding(s) for comparison {}", findings.size(), comparisonId);
     }
 
+    /**
+     * Adds or replaces ONE finding, for a targeted retry. Architecture §18.4.
+     *
+     * <p>Replace-by-requirement rather than insert. A retry that appended would leave two rows for one
+     * requirement, and the consolidation step upstream is not re-run here — so a reviewer would see the
+     * same control twice with different verdicts and no way to tell which is current.
+     *
+     * <p>Scoped to the comparison AND the requirement, never a broader filter: this runs against a
+     * collection holding every comparison's working results.
+     */
+    public void appendFinding(Finding finding) {
+        mongo.remove(Query.query(Criteria.where("comparisonId").is(finding.comparisonId())
+                        .and("requirementId").is(finding.requirementId())),
+                RESULTS_COLLECTION);
+        mongo.insert(finding, RESULTS_COLLECTION);
+        log.info("Stored retried finding for {} in comparison {}",
+                finding.requirementId(), finding.comparisonId());
+    }
+
     /** Reads back the working results, for review-core's hydration call (§16.5). */
     public List<Finding> read(String comparisonId) {
         return mongo.find(Query.query(Criteria.where("comparisonId").is(comparisonId)),

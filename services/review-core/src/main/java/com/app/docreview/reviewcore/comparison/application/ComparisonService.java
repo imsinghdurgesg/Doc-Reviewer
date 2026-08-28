@@ -9,6 +9,7 @@ import com.app.docreview.reviewcore.standards.domain.StandardVersion;
 import com.app.docreview.reviewcore.standards.repository.StandardVersionRepository;
 import com.app.docreview.reviewcore.upload.domain.UploadedDocument;
 import com.app.docreview.reviewcore.upload.domain.UploadedDocumentRepository;
+import com.app.docreview.reviewcore.workflow.ComparisonFindingReader;
 import com.app.docreview.reviewcore.workflow.JobDispatcher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,13 @@ public class ComparisonService {
     private final UploadedDocumentRepository documents;
     private final StandardVersionRepository standardVersions;
     private final JobDispatcher jobDispatcher;
+    /**
+     * Reads findings and coverage back from the worker.
+     *
+     * <p>Needed for a targeted retry: the amendment happens in the worker's working set, and this
+     * service must re-pull both to keep the authoritative comparison consistent with it.
+     */
+    private final com.app.docreview.reviewcore.workflow.ComparisonFindingReader findingReader;
 
     /**
      * Creates a comparison and queues evaluation.
@@ -141,6 +149,52 @@ public class ComparisonService {
                 original.getStandardVersionIds() == null
                         ? 0 : original.getStandardVersionIds().size());
         return rerun;
+    }
+
+    /**
+     * Re-evaluates ONE failed requirement and amends this comparison. Architecture §18.4, §19.2.
+     *
+     * <p>1 model call rather than the whole comparison. A single requirement is usually rejected because
+     * the model's verdict contradicted the evidence it cited — a per-call inconsistency — so repeating
+     * every other requirement to recover it is waste, and it produces a second comparison the reviewer
+     * must re-read.
+     *
+     * <p><strong>This DOES amend a stored comparison</strong>, which §19.2 otherwise forbids. The
+     * amendment is made auditable instead of prevented: the retried finding carries its own prompt,
+     * model and override versions, so a reader can see that one row was produced separately and under
+     * what. Without that stamp the comparison would claim a single provenance it no longer had.
+     *
+     * <p>Findings and coverage are both re-pulled afterwards. Updating one without the other would
+     * leave a finding present while coverage still called the requirement untested.
+     */
+    public Comparison retryRequirement(String publicId, String requirementId, String ownerOrNull) {
+        var comparison = getVisibleTo(publicId, ownerOrNull);
+
+        if (!findingReader.retryRequirement(publicId, requirementId)) {
+            throw ApiException.conflict("RETRY_FAILED",
+                    "Requirement " + requirementId + " could not be evaluated on retry. It remains "
+                            + "untested and is still excluded from the conclusion.");
+        }
+
+        comparison.setFindings(findingReader.read(publicId));
+        var fetch = findingReader.readCoverage(publicId);
+        if (fetch.outcome() == ComparisonFindingReader.CoverageFetch.Outcome.FOUND) {
+            comparison.setCoverageLedger(fetch.ledger());
+        }
+
+        // The state can IMPROVE: a comparison whose only gap was this requirement is now complete.
+        // Recomputed from the ledger rather than assumed, so it cannot claim completeness the coverage
+        // record does not support.
+        if (comparison.getCoverageLedger() != null
+                && comparison.getCoverageLedger().isComplete()) {
+            comparison.setState(ComparisonState.COMPLETED);
+            comparison.setStateMessage(null);
+        }
+        comparisons.save(comparison);
+
+        log.info("Retried requirement {} in comparison {}; state now {}",
+                requirementId, publicId, comparison.getState());
+        return comparison;
     }
 
     public Comparison get(String publicId) {

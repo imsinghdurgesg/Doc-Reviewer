@@ -89,6 +89,19 @@ public class ComparisonController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(toDetail(rerun));
     }
 
+    /**
+     * Re-evaluates ONE failed requirement in place. Architecture §18.4.
+     *
+     * <p>Returns the AMENDED comparison, so the client re-renders with the recovered finding and the
+     * updated coverage rather than having to re-fetch and guess what changed.
+     */
+    @PostMapping("/{publicId}/requirements/{requirementId}/retry")
+    public ComparisonDetailResponse retryRequirement(@PathVariable String publicId,
+                                                     @PathVariable String requirementId) {
+        return toDetail(comparisonService.retryRequirement(
+                publicId, requirementId, visibilityScope()));
+    }
+
     @GetMapping("/{publicId}")
     public ComparisonDetailResponse get(@PathVariable String publicId) {
         return toDetail(comparisonService.getVisibleTo(publicId, visibilityScope()));

@@ -42,6 +42,8 @@ import static org.mockito.Mockito.when;
  */
 class ComparisonRerunTest {
 
+    private com.app.docreview.reviewcore.workflow.ComparisonFindingReader findingReader;
+
     private ComparisonRepository comparisons;
     private UploadedDocumentRepository documents;
     private StandardVersionRepository standardVersions;
@@ -54,7 +56,10 @@ class ComparisonRerunTest {
         documents = Mockito.mock(UploadedDocumentRepository.class);
         standardVersions = Mockito.mock(StandardVersionRepository.class);
         jobDispatcher = Mockito.mock(JobDispatcher.class);
-        service = new ComparisonService(comparisons, documents, standardVersions, jobDispatcher);
+        findingReader = Mockito.mock(
+                com.app.docreview.reviewcore.workflow.ComparisonFindingReader.class);
+        service = new ComparisonService(comparisons, documents, standardVersions, jobDispatcher,
+                findingReader);
         set(service, "maxRequirementsPerComparison", 500);
 
         var document = Mockito.mock(UploadedDocument.class);
@@ -166,5 +171,49 @@ class ComparisonRerunTest {
         assertThat(rerun.getDocumentVersionId()).isEqualTo("PROC-1");
         // Attributed to whoever RAN it, not to the original owner: the rerun is their assessment.
         assertThat(rerun.getCreatedBy()).isEqualTo("admin@x");
+    }
+
+    @Test
+    @DisplayName("a targeted retry amends this comparison rather than creating another")
+    void targetedRetryAmendsInPlace() {
+        var original = failed("reviewer@x");
+        when(findingReader.retryRequirement("CMP-old", "CHG-08-R2")).thenReturn(true);
+        when(findingReader.read("CMP-old")).thenReturn(List.of());
+        when(findingReader.readCoverage("CMP-old")).thenReturn(
+                com.app.docreview.reviewcore.workflow.ComparisonFindingReader.CoverageFetch
+                        .unavailable("no ledger in this fixture"));
+
+        var amended = service.retryRequirement("CMP-old", "CHG-08-R2", "reviewer@x");
+
+        // SAME comparison — the point of a targeted retry. A new one would cost 187 calls and hand the
+        // reviewer a second record to re-read.
+        assertThat(amended.getPublicId()).isEqualTo("CMP-old");
+        assertThat(amended).isSameAs(original);
+        // And no new comparison was dispatched.
+        verify(jobDispatcher, never()).dispatchRetrievalComparison(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("a retry that fails again is reported, not silently accepted")
+    void failedRetryIsReported() {
+        failed("reviewer@x");
+        when(findingReader.retryRequirement("CMP-old", "CHG-08-R2")).thenReturn(false);
+
+        // The requirement stays untested. Returning success would imply a recovery that did not happen
+        // — and its coverage row would still say PENDING, contradicting the response.
+        assertThatThrownBy(() -> service.retryRequirement("CMP-old", "CHG-08-R2", "reviewer@x"))
+                .isInstanceOf(ApiException.class)
+                .hasMessageContaining("remains");
+    }
+
+    @Test
+    @DisplayName("a retry cannot reach a comparison the caller cannot open")
+    void retryRespectsVisibility() {
+        failed("someone-else@x");
+
+        assertThatThrownBy(() -> service.retryRequirement("CMP-old", "CHG-08-R2", "reviewer@x"))
+                .isInstanceOf(ApiException.class);
+        // The worker is never even asked: the boundary is checked before any work is requested.
+        verify(findingReader, never()).retryRequirement(any(), any());
     }
 }
