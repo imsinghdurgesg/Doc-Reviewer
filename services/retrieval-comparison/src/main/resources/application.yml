@@ -99,12 +99,20 @@ docreview:
     # Cap on requirements evaluated per comparison. §15.5 forbids unbounded fan-out; without a cap a
     # large standard set turns one upload into thousands of model calls.
     #
-    # 120 is a deliberately CONSERVATIVE default for a shared organizational proxy: one comparison
-    # costs up to 120 comparison calls plus 120 embedding calls, and §18.4's single retry can add
-    # more. Raise it per-environment once real latency and budget are known — a default that is too
-    # low truncates visibly (the runner logs what it dropped), whereas one that is too high spends
-    # the budget before anyone notices.
-    max-requirements-per-comparison: ${MAX_REQUIREMENTS_PER_COMPARISON:120}
+    # 500 covers every realistic multi-standard selection on the current corpus, whose ten standards
+    # total roughly 440 material requirements. It is a SAFETY BOUND against unbounded fan-out, not a
+    # budget dial — set MAX_REQUIREMENTS_PER_COMPARISON per environment to impose a real budget.
+    #
+    # It was 120, which silently truncated a three-standard selection of 187 requirements: the first
+    # standard got all 84, the second 36 of 44, and the third NOTHING — an empty tab for a standard the
+    # reviewer had explicitly chosen. Worse, the cap ran before the coverage ledger was built, so the
+    # comparison reported 120/120 evaluated and COMPLETED while 67 requirements had been dropped.
+    #
+    # Both are fixed independently of this number: truncation now interleaves across standards, and
+    # dropped requirements become PENDING ledger rows carrying a reason, which blocks COMPLETED. So a
+    # low value is now visible rather than misleading. The default is high because the cap should bite
+    # only where fan-out is genuinely unreasonable.
+    max-requirements-per-comparison: ${MAX_REQUIREMENTS_PER_COMPARISON:500}
 
   qdrant:
     host: ${QDRANT_HOST:localhost}

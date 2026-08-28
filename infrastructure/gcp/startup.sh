@@ -76,6 +76,11 @@ SSO_HOSTED_DOMAIN="$(meta sso-hosted-domain)"; SSO_HOSTED_DOMAIN="${SSO_HOSTED_D
 SSO_ADMIN_EMAILS="$(meta sso-admin-emails)"
 SSO_STANDARDS_ADMIN_EMAILS="$(meta sso-standards-admin-emails)"
 IMAGE_TAG="$(meta image-tag)"; IMAGE_TAG="${IMAGE_TAG:-latest}"
+# A safety bound against unbounded fan-out, overridable from instance metadata so it can be tuned
+# without a redeploy. Previously hardcoded to 120 here, which silently overrode the application
+# default: a three-standard selection of 187 requirements lost 67, and the third standard was
+# evaluated against nothing at all.
+MAX_REQS="$(meta max-requirements-per-comparison)"; MAX_REQS="${MAX_REQS:-500}"
 LITELLM_BASE_URL="$(meta litellm-base-url)"
 REPO="${REGION}-docker.pkg.dev/${PROJECT}/docreview"
 
@@ -145,7 +150,7 @@ LITELLM_API_KEY=$LITELLM_API_KEY
 # --- proxied model calls, so the ceiling is the proxy's rate limit rather than local CPU (§10.5).
 JOB_WORKER_THREADS=2
 DOC_JOB_WORKER_THREADS=4
-MAX_REQUIREMENTS_PER_COMPARISON=120
+MAX_REQUIREMENTS_PER_COMPARISON=$MAX_REQS
 DOCREVIEW_IMAGE_TAG=$IMAGE_TAG
 DOCREVIEW_REPO=$REPO
 EOF

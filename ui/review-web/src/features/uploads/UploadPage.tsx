@@ -33,6 +33,17 @@ const EMPTY_CONTEXT: AssessmentContextValue = {
 };
 
 /**
+ * The per-comparison requirement limit the backend enforces.
+ *
+ * Mirrored here so the reviewer is warned while selecting rather than rejected on submit. It is a
+ * DUPLICATE of a server value (MAX_REQUIREMENTS_PER_COMPARISON), which is a real drift risk — but the
+ * failure is safe in one direction only: if the server's limit is lower, its rejection still stops the
+ * run with an explicit message naming both numbers. The UI warning is an early courtesy, never the
+ * enforcement point.
+ */
+const MAX_REQUIREMENTS_PER_COMPARISON = 500;
+
+/**
  * Upload a process document and start a review. Architecture §14, §20.2.
  *
  * This is the entry point to the whole flow: upload, wait for parsing, pick standards, compare.
@@ -129,6 +140,23 @@ export function UploadPage() {
         ? current.filter((id) => id !== versionId)
         : [...current, versionId],
     );
+
+  /**
+   * Requirements the current selection would evaluate, against the per-comparison limit.
+   *
+   * A selection over the limit is REFUSED by the backend rather than truncated, so this warns while
+   * the reviewer is still choosing. Previously the limit was applied silently during the run: a
+   * three-standard selection of 187 requirements evaluated 120 of them, gave the third standard none
+   * at all, and reported the result as complete — the reviewer paid for a full run and got an empty
+   * tab with no explanation.
+   *
+   * Material count, matching the chip: only material requirements are evaluated (§12.2).
+   */
+  const selectedRequirementCount = comparableVersions
+    .filter(({ version }) => selectedVersionIds.includes(version.id))
+    .reduce((sum, { version }) => sum + (version.materialRequirementCount ?? 0), 0);
+
+  const overRequirementLimit = selectedRequirementCount > MAX_REQUIREMENTS_PER_COMPARISON;
 
   const parsing = Boolean(currentDocument && !currentDocument.readyForComparison);
   const parseFailed = currentDocument?.state === "FAILED";
@@ -328,6 +356,32 @@ export function UploadPage() {
         ))}
       </Stack>
 
+      {/* A running total while selecting, so the limit is never a surprise on submit. Shown only once
+          something is selected — a count of zero teaches nothing. */}
+      {selectedVersionIds.length > 0 && (
+        <Typography
+          variant="caption"
+          sx={{ display: "block", mb: 1, color: overRequirementLimit ? "#a8323a" : "text.secondary" }}
+        >
+          {selectedRequirementCount} requirements selected
+          {overRequirementLimit
+            ? ` — over the ${MAX_REQUIREMENTS_PER_COMPARISON} a single comparison evaluates`
+            : ` of ${MAX_REQUIREMENTS_PER_COMPARISON} per comparison`}
+        </Typography>
+      )}
+
+      {/* STOPS the reviewer rather than truncating. The old behaviour ran anyway and dropped the
+          excess silently: a standard the reviewer had chosen came back with nothing evaluated, and
+          the result still reported as complete. Naming both numbers and the remedy is what makes this
+          actionable instead of just a refusal. */}
+      {overRequirementLimit && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          The selected standards contain {selectedRequirementCount} requirements, more than the{" "}
+          {MAX_REQUIREMENTS_PER_COMPARISON} a single comparison evaluates. Deselect a standard, or
+          review them separately so every requirement is assessed.
+        </Alert>
+      )}
+
       <Stack direction="row" spacing={2} sx={{ alignItems: "center" }}>
         <Button
           variant="contained"
@@ -335,7 +389,13 @@ export function UploadPage() {
           // Selection is OPTIONAL. An empty selection asks the platform to find the governing
           // standard by relevance (§15.1), which is the question a reviewer uploading a procedure
           // usually has — they know the process, not which policy covers it.
-          disabled={!currentDocument?.readyForComparison || createComparison.isPending}
+          // Also disabled over the limit: the backend refuses it, so letting the click through
+          // would produce an error where a disabled button plus the alert above already explain why.
+          disabled={
+            !currentDocument?.readyForComparison ||
+            createComparison.isPending ||
+            overRequirementLimit
+          }
           onClick={() =>
             currentDocument && createComparison.mutate(currentDocument.documentVersionId)
           }

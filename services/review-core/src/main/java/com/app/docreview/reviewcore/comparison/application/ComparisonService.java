@@ -39,6 +39,19 @@ import java.util.UUID;
 @Slf4j
 public class ComparisonService {
 
+    /**
+     * The worker's per-comparison requirement bound, mirrored so a selection can be refused BEFORE a
+     * run starts rather than truncated during one (§15.5).
+     *
+     * <p>Must match {@code docreview.jobs.max-requirements-per-comparison} in retrieval-comparison.
+     * Two services holding one number is a real risk — if review-core's is higher, a selection it
+     * accepts is silently truncated by the worker — so both read the same environment variable
+     * (MAX_REQUIREMENTS_PER_COMPARISON) and default to the same value.
+     */
+    @org.springframework.beans.factory.annotation.Value(
+            "${docreview.comparison.max-requirements:${MAX_REQUIREMENTS_PER_COMPARISON:500}}")
+    private int maxRequirementsPerComparison;
+
     private final ComparisonRepository comparisons;
     private final UploadedDocumentRepository documents;
     private final StandardVersionRepository standardVersions;
@@ -227,6 +240,8 @@ public class ComparisonService {
     }
 
     private void requireComparableStandards(List<String> standardVersionIds) {
+        int totalRequirements = 0;
+
         for (String id : standardVersionIds) {
             var version = standardVersions.findById(id)
                     .orElseThrow(() -> ApiException.badRequest("UNKNOWN_STANDARD_VERSION",
@@ -239,6 +254,26 @@ public class ComparisonService {
                                 + ". An unindexed standard has no requirements, so the comparison "
                                 + "would produce no findings.");
             }
+            totalRequirements += version.getMaterialRequirementCount();
+        }
+
+        // REFUSED UP FRONT, not truncated during the run.
+        //
+        // The worker bounds requirements per comparison (§15.5). Exceeding it used to truncate
+        // silently: a three-standard selection of 187 requirements against a cap of 120 gave the first
+        // standard all 84, the second 36 of 44, and the third NOTHING — and the reviewer got an empty
+        // tab for a standard they had chosen, after paying for a full run.
+        //
+        // Rejecting here is the honest behaviour. A reviewer who selected too much should be told
+        // before the comparison starts, with the numbers, rather than handed a partial result that
+        // looks complete. The truncation path still exists as a backstop and now records dropped
+        // requirements as untested coverage rows — but a reviewer should never reach it.
+        if (totalRequirements > maxRequirementsPerComparison) {
+            throw ApiException.badRequest("TOO_MANY_REQUIREMENTS",
+                    "The selected standards contain " + totalRequirements
+                            + " requirements, more than the " + maxRequirementsPerComparison
+                            + " a single comparison evaluates. Select fewer standards, or compare "
+                            + "against them in separate reviews so every requirement is assessed.");
         }
     }
 }

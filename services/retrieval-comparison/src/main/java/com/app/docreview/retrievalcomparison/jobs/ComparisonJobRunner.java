@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -167,7 +168,8 @@ public class ComparisonJobRunner {
                 resolveDocumentType(job, processSpans);
             }
 
-            var requirements = loadRequirements(standardVersionIds);
+            var loaded = loadRequirements(standardVersionIds);
+            var requirements = loaded.evaluated();
             if (requirements.isEmpty()) {
                 fail(job, "The selected standards have no validated requirements to compare. "
                         + "Index the standard versions before comparing against them.");
@@ -241,8 +243,28 @@ public class ComparisonJobRunner {
                     .toList();
             var skipped = applicabilityCoordinator.skippedForLedger(applicabilityDecisions);
 
+            // The ledger is built over EVERY expected requirement, including the ones the cap removed.
+            //
+            // Previously it received only the survivors, so a capped run reported 120/120 EVALUATED,
+            // "Not evaluated: 0" and COMPLETED while 67 requirements had been silently dropped — and a
+            // standard the reviewer had explicitly selected showed an empty tab with no explanation.
+            // The dropped ones have no finding and no recorded failure, so they land as PENDING, which
+            // is the one state that blocks completion (§18.4). That is the correct reading: they were
+            // expected and never attempted.
+            var expected = new ArrayList<>(requirements);
+            expected.addAll(loaded.dropped());
+
+            var cappedReason = new HashMap<String, String>();
+            for (var requirement : loaded.dropped()) {
+                cappedReason.put(requirement.getRequirementId(),
+                        "Not evaluated: this comparison spans more requirements than the "
+                                + maxRequirements + "-requirement limit for a single run. Compare "
+                                + "against fewer standards at once to cover it.");
+            }
+
             var ledger = coverageLedgerService.build(
-                    job.getComparisonId(), requirements, consolidated, failedRequirementIds, skipped);
+                    job.getComparisonId(), expected, consolidated, failedRequirementIds, skipped,
+                    cappedReason);
 
             // PERSISTED before the terminal state is decided below, so a reviewer told
             // "partially completed" can always find out which requirements that refers to. Computing
@@ -357,7 +379,7 @@ public class ComparisonJobRunner {
      * one is spend with no possible finding. Bounded by {@code maxRequirements} because §15.5 forbids
      * unbounded fan-out — the cap is logged when it bites, so a truncated run is never silent.
      */
-    private List<StandardRequirementDocument> loadRequirements(List<String> standardVersionIds) {
+    private LoadedRequirements loadRequirements(List<String> standardVersionIds) {
         List<StandardRequirementDocument> all = new ArrayList<>();
 
         for (String standardVersionId : standardVersionIds) {
@@ -378,13 +400,72 @@ public class ComparisonJobRunner {
                             standardVersionId, latestSet.get().getRequirementSetVersion(), true));
         }
 
-        if (all.size() > maxRequirements) {
-            log.warn("Comparison spans {} requirements; capping at {} (§15.5). "
-                            + "{} requirements will NOT be evaluated.",
-                    all.size(), maxRequirements, all.size() - maxRequirements);
-            return all.subList(0, maxRequirements);
+        if (all.size() <= maxRequirements) {
+            return new LoadedRequirements(all, List.of());
         }
-        return all;
+
+        // ROUND-ROBIN, NOT sequential truncation.
+        //
+        // `subList(0, cap)` took requirements in standard order, so a three-standard comparison of
+        // 84 + 44 + 59 against a cap of 120 gave the first standard all 84, the second 36 of 44, and
+        // the third NOTHING. The reviewer saw an empty tab for a standard they had explicitly
+        // selected, with no explanation — and the cap is a budget, not a statement that later
+        // standards matter less.
+        //
+        // Interleaving spends the budget evenly, so every selected standard is represented and a
+        // partial result is partial everywhere rather than complete in one place and absent in
+        // another.
+        var byStandard = new LinkedHashMap<String, List<StandardRequirementDocument>>();
+        for (var requirement : all) {
+            byStandard.computeIfAbsent(requirement.getStandardVersionId(), k -> new ArrayList<>())
+                    .add(requirement);
+        }
+
+        var kept = new ArrayList<StandardRequirementDocument>(maxRequirements);
+        var queues = new ArrayList<>(byStandard.values());
+        int index = 0;
+        while (kept.size() < maxRequirements) {
+            boolean tookAny = false;
+            for (var queue : queues) {
+                if (index < queue.size()) {
+                    kept.add(queue.get(index));
+                    tookAny = true;
+                    if (kept.size() == maxRequirements) {
+                        break;
+                    }
+                }
+            }
+            if (!tookAny) {
+                break;
+            }
+            index++;
+        }
+
+        // The DROPPED ones, returned rather than discarded. Previously the cap truncated the list
+        // before the coverage ledger was built, so the ledger only ever saw the survivors: it
+        // reported 120/120 EVALUATED, "Not evaluated: 0", and COMPLETED while 67 requirements had
+        // been silently removed. A clean-looking report that is wrong is exactly what §17.6 exists to
+        // prevent, so these now become explicit ledger rows.
+        var keptIds = kept.stream()
+                .map(StandardRequirementDocument::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        var dropped = all.stream().filter(r -> !keptIds.contains(r.getId())).toList();
+
+        log.warn("Comparison spans {} requirements; capping at {} (§15.5). {} requirements will NOT "
+                        + "be evaluated and are recorded as untested coverage rows.",
+                all.size(), maxRequirements, dropped.size());
+        return new LoadedRequirements(kept, dropped);
+    }
+
+    /**
+     * What a comparison will evaluate, and what the cap excluded.
+     *
+     * @param evaluated the requirements to compare, interleaved across standards
+     * @param dropped   requirements the cap removed. Carried so the coverage ledger can record them
+     *                  as untested — their absence from the findings must never read as compliance.
+     */
+    private record LoadedRequirements(List<StandardRequirementDocument> evaluated,
+                                      List<StandardRequirementDocument> dropped) {
     }
 
     /**

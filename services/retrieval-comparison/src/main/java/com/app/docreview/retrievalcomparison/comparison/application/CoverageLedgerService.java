@@ -34,12 +34,31 @@ public class CoverageLedgerService {
      * @param findings      what evaluation actually produced
      * @param failedIds     requirement ids whose evaluation raised an error, from the job runner
      * @param skipped       requirement id to reason, for deliberate exclusions
+     * @param notAttemptedReasons requirement id to reason, for requirements that were expected but
+     *                      never attempted — the per-comparison cap being the case that matters. They
+     *                      become PENDING, which blocks completion, and the reason is what turns
+     *                      "not evaluated" into something a reviewer can act on.
+     */
+    /**
+     * Builds a ledger where nothing was dropped before evaluation.
+     *
+     * <p>The common case: every expected requirement was attempted, so an unattempted one is a defect
+     * rather than a budget decision and needs no explanatory reason.
      */
     public CoverageLedger build(String comparisonId,
                                 List<StandardRequirementDocument> requirements,
                                 List<Finding> findings,
                                 Set<String> failedIds,
                                 Map<String, String> skipped) {
+        return build(comparisonId, requirements, findings, failedIds, skipped, Map.of());
+    }
+
+    public CoverageLedger build(String comparisonId,
+                                List<StandardRequirementDocument> requirements,
+                                List<Finding> findings,
+                                Set<String> failedIds,
+                                Map<String, String> skipped,
+                                Map<String, String> notAttemptedReasons) {
 
         // Kept as the finding, not just its id: applicability travels on the finding, and the ledger
         // needs it to tell "evaluated and ready to act on" from "evaluated with an open scope
@@ -53,6 +72,8 @@ public class CoverageLedgerService {
         }
         var failed = failedIds == null ? Set.<String>of() : failedIds;
         var skips = skipped == null ? Map.<String, String>of() : skipped;
+        var notAttempted = notAttemptedReasons == null
+                ? Map.<String, String>of() : notAttemptedReasons;
 
         List<CoverageLedger.Entry> entries = new ArrayList<>();
         for (var requirement : requirements == null ? List.<StandardRequirementDocument>of()
@@ -92,6 +113,10 @@ public class CoverageLedgerService {
             } else {
                 // Expected, never attempted, no error recorded. The state that must block completion.
                 state = CoverageLedger.CoverageState.PENDING;
+                // A reason when the caller supplied one. A requirement removed by the per-comparison
+                // cap is not a bug, but "not evaluated" with no explanation is unactionable — the
+                // reviewer cannot tell a budget limit from a dropped control.
+                detail = notAttempted.get(id);
             }
 
             entries.add(new CoverageLedger.Entry(

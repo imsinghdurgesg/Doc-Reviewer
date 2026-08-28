@@ -107,6 +107,11 @@ services:
       # demo by default. SECURITY_MODE=sso activates the Google chain; the client registration only
       # exists in that mode, so blank credentials here are correct and harmless under demo.
       SECURITY_MODE: ${SECURITY_MODE:-demo}
+      # SAME value as retrieval-comparison, from the same variable. review-core refuses an oversized
+      # selection at creation; the worker truncates as a backstop. If review-core's limit were the
+      # higher of the two, it would accept a selection the worker then silently trimmed — so they must
+      # not be allowed to drift apart by one of them simply not being set.
+      MAX_REQUIREMENTS_PER_COMPARISON: ${MAX_REQUIREMENTS_PER_COMPARISON:-500}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       GOOGLE_CLIENT_AUTH_METHOD: ${GOOGLE_CLIENT_AUTH_METHOD:-none}
@@ -239,7 +244,11 @@ services:
       # Lower than document-processing on purpose: each unit is a chain of proxy calls, so the bound
       # is rate limits and budget rather than CPU (§10.5).
       JOB_WORKER_THREADS: ${JOB_WORKER_THREADS:-2}
-      MAX_REQUIREMENTS_PER_COMPARISON: ${MAX_REQUIREMENTS_PER_COMPARISON:-120}
+      # A safety bound against unbounded fan-out, not a budget dial. 500 covers every realistic
+      # multi-standard selection on this corpus (~440 material requirements across ten standards).
+      # Override per environment to impose an actual budget; at 120 a three-standard selection lost
+      # 67 requirements, and the third standard got none of its own.
+      MAX_REQUIREMENTS_PER_COMPARISON: ${MAX_REQUIREMENTS_PER_COMPARISON:-500}
     depends_on:
       mongodb:
         condition: service_healthy
