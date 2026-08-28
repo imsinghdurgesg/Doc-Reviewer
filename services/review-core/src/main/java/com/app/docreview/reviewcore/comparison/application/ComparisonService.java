@@ -182,13 +182,62 @@ public class ComparisonService {
             comparison.setCoverageLedger(fetch.ledger());
         }
 
-        // The state can IMPROVE: a comparison whose only gap was this requirement is now complete.
-        // Recomputed from the ledger rather than assumed, so it cannot claim completeness the coverage
-        // record does not support.
-        if (comparison.getCoverageLedger() != null
-                && comparison.getCoverageLedger().isComplete()) {
-            comparison.setState(ComparisonState.COMPLETED);
-            comparison.setStateMessage(null);
+        // THE HEADER COUNTERS, recomputed from the ledger.
+        //
+        // They are normally set from the callback's completedUnits/totalUnits, and a retry sends no
+        // callback — so "186 / 187" stayed on screen after a successful retry while the coverage panel
+        // below it showed the requirement recovered. Two numbers describing the same thing, disagreeing.
+        //
+        // The ledger is the authority here: it has one row per expected requirement and knows which
+        // produced a verdict, which is exactly what these counters claim to report.
+        var ledger = comparison.getCoverageLedger();
+        if (ledger != null) {
+            comparison.setEvaluatedRequirements((int) ledger.evaluatedCount());
+            comparison.setTotalRequirements(ledger.expectedCount());
+
+            // AND the named list behind the top warning, which is what a reviewer actually reads.
+            // It came from the callback's unitErrors and was never revised, so a recovered requirement
+            // stayed named as unevaluated — the most specific, most trusted statement on the page,
+            // still asserting a gap that had just been closed.
+            //
+            // Rebuilt from the entries that genuinely produced no verdict, in the same
+            // "requirementId: reason" form the UI parses.
+            comparison.setUnevaluatedRequirements(ledger.entries().stream()
+                    .filter(e -> !e.state().producedVerdict())
+                    .filter(e -> e.state() != com.app.docreview.contracts.comparison.CoverageLedger
+                            .CoverageState.SKIPPED)
+                    .map(e -> e.requirementId() + ": "
+                            + (e.detail() == null ? "not evaluated" : e.detail()))
+                    .toList());
+        }
+
+        // THE STATE, derived from the ledger in BOTH directions.
+        //
+        // Not only "can improve to COMPLETED": a retry on a comparison with other gaps left the old
+        // FAILED state and its now-wrong message in place, and a comparison recorded FAILED for a
+        // missing coverage snapshot stayed FAILED after coverage was rebuilt. The state has to follow
+        // the coverage record, not accumulate from whatever it was before.
+        if (ledger != null) {
+            // UNTESTED, not `isComplete()`. isComplete() asks whether anything is still PENDING — and
+            // FAILED is terminal, so a comparison with a permanently failed requirement satisfies it.
+            // The right question for the comparison's state is whether every requirement produced a
+            // verdict, which is what a reviewer reads "completed" as meaning.
+            long untested = ledger.entries().stream()
+                    .filter(e -> !e.state().producedVerdict())
+                    .filter(e -> e.state() != com.app.docreview.contracts.comparison.CoverageLedger
+                            .CoverageState.SKIPPED)
+                    .count();
+
+            if (untested == 0) {
+                comparison.setState(ComparisonState.COMPLETED);
+                comparison.setStateMessage(null);
+            } else {
+                // Still gaps, so still partial — with a message that names the CURRENT shortfall
+                // rather than the one from the original run.
+                comparison.setState(ComparisonState.PARTIALLY_COMPLETED);
+                comparison.setStateMessage(untested + " of " + ledger.expectedCount()
+                        + " requirements could not be evaluated.");
+            }
         }
         comparisons.save(comparison);
 

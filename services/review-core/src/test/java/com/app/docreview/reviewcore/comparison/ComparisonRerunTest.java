@@ -216,4 +216,98 @@ class ComparisonRerunTest {
         // The worker is never even asked: the boundary is checked before any work is requested.
         verify(findingReader, never()).retryRequirement(any(), any());
     }
+
+    @Test
+    @DisplayName("every displayed number is recomputed after a retry, not just coverage")
+    void retryUpdatesAllDisplayedCounts() {
+        var original = failed("reviewer@x");
+        // As the callback left them: stale the moment a retry recovers something.
+        original.setEvaluatedRequirements(186);
+        original.setTotalRequirements(187);
+        original.setUnevaluatedRequirements(List.of("CHG-08-R2: Evaluation failed"));
+
+        // The rebuilt ledger the worker returns: the requirement now has a verdict.
+        var recovered = new com.app.docreview.contracts.comparison.CoverageLedger("CMP-old", List.of(
+                new com.app.docreview.contracts.comparison.CoverageLedger.Entry(
+                        "sv-1", "REQSET-V3", "CHG-08-R2",
+                        com.app.docreview.contracts.comparison.CoverageLedger.CoverageState.EVALUATED,
+                        null, "Emergency retrospective review")));
+        when(findingReader.retryRequirement("CMP-old", "CHG-08-R2")).thenReturn(true);
+        when(findingReader.read("CMP-old")).thenReturn(List.of());
+        when(findingReader.readCoverage("CMP-old")).thenReturn(
+                com.app.docreview.reviewcore.workflow.ComparisonFindingReader.CoverageFetch
+                        .found(recovered));
+
+        var amended = service.retryRequirement("CMP-old", "CHG-08-R2", "reviewer@x");
+
+        // FOUR displays, one truth. The header counter is set from the callback's completedUnits and a
+        // retry sends no callback, so it stayed at 186/187 while the coverage panel below showed the
+        // requirement recovered — two numbers describing the same thing, disagreeing on screen.
+        assertThat(amended.getEvaluatedRequirements()).isEqualTo(1);
+        assertThat(amended.getTotalRequirements()).isEqualTo(1);
+        // And the NAMED list behind the top warning, which is the most specific claim on the page.
+        assertThat(amended.getUnevaluatedRequirements())
+                .as("a recovered requirement must stop being named as unevaluated")
+                .isEmpty();
+        assertThat(amended.getState()).isEqualTo(ComparisonState.COMPLETED);
+        assertThat(amended.getStateMessage()).isNull();
+    }
+
+    @Test
+    @DisplayName("a not-applicable requirement is not listed as unevaluated")
+    void skippedIsNotReportedAsUnevaluated() {
+        var original = failed("reviewer@x");
+        var ledger = new com.app.docreview.contracts.comparison.CoverageLedger("CMP-old", List.of(
+                new com.app.docreview.contracts.comparison.CoverageLedger.Entry(
+                        "sv-1", "REQSET-V3", "CHG-09",
+                        com.app.docreview.contracts.comparison.CoverageLedger.CoverageState.SKIPPED,
+                        "Applies to Retention Schedule", "Records retention")));
+        when(findingReader.retryRequirement("CMP-old", "CHG-08-R2")).thenReturn(true);
+        when(findingReader.read("CMP-old")).thenReturn(List.of());
+        when(findingReader.readCoverage("CMP-old")).thenReturn(
+                com.app.docreview.reviewcore.workflow.ComparisonFindingReader.CoverageFetch
+                        .found(ledger));
+
+        var amended = service.retryRequirement("CMP-old", "CHG-08-R2", "reviewer@x");
+
+        // A governed exclusion is a DECISION, not a failure to evaluate. Listing it under "could not be
+        // evaluated" would report a correct exclusion as a defect in the review.
+        assertThat(amended.getUnevaluatedRequirements()).isEmpty();
+        assertThat(original.getCoverageLedger().notApplicableCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a retry that leaves other gaps reports PARTIALLY_COMPLETED with a current message")
+    void stateFollowsTheLedgerDownwardToo() {
+        var original = failed("reviewer@x");
+        original.setStateMessage("Coverage snapshot missing.");
+
+        // One requirement recovered, another still untested.
+        var partial = new com.app.docreview.contracts.comparison.CoverageLedger("CMP-old", List.of(
+                new com.app.docreview.contracts.comparison.CoverageLedger.Entry(
+                        "sv-1", "REQSET-V3", "CHG-08-R2",
+                        com.app.docreview.contracts.comparison.CoverageLedger.CoverageState.EVALUATED,
+                        null, "Emergency retrospective review"),
+                new com.app.docreview.contracts.comparison.CoverageLedger.Entry(
+                        "sv-1", "REQSET-V3", "CHG-11",
+                        com.app.docreview.contracts.comparison.CoverageLedger.CoverageState.FAILED,
+                        "Evaluation failed", "Post-change verification")));
+        when(findingReader.retryRequirement("CMP-old", "CHG-08-R2")).thenReturn(true);
+        when(findingReader.read("CMP-old")).thenReturn(List.of());
+        when(findingReader.readCoverage("CMP-old")).thenReturn(
+                com.app.docreview.reviewcore.workflow.ComparisonFindingReader.CoverageFetch
+                        .found(partial));
+
+        var amended = service.retryRequirement("CMP-old", "CHG-08-R2", "reviewer@x");
+
+        // The state must FOLLOW the ledger, not accumulate. Previously the transition only ever moved
+        // toward COMPLETED, so this comparison kept FAILED and a message about a missing coverage
+        // snapshot that no longer applied.
+        assertThat(amended.getState()).isEqualTo(ComparisonState.PARTIALLY_COMPLETED);
+        assertThat(amended.getStateMessage())
+                .as("the message must name the CURRENT shortfall, not the original one")
+                .isEqualTo("1 of 2 requirements could not be evaluated.");
+        assertThat(amended.getEvaluatedRequirements()).isEqualTo(1);
+        assertThat(amended.getUnevaluatedRequirements()).containsExactly("CHG-11: Evaluation failed");
+    }
 }
