@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cross-service contracts. Architecture §6, §7.
+
+  Deliberately has NO Spring Boot, NO MongoDB types, and NO service implementation dependency. That
+  is what keeps it a contract module rather than a shared-domain dumping ground: if this module
+  could see Spring, a persistence annotation or a @Service would eventually land here and the three
+  services would be coupled through it.
+
+  Java records only, per §39.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.app.docreview</groupId>
+    <artifactId>document-standard-platform</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>platform-contracts</artifactId>
+  <name>platform-contracts</name>
+
+  <dependencies>
+    <!--
+      Jackson ANNOTATIONS only, not databind. Records here are serialized by whichever service owns
+      the endpoint; this module only needs the annotations to describe the wire shape.
+
+      Note for Jackson 3 (Boot 4): annotations stay at com.fasterxml.jackson.core. Only databind
+      moved to tools.jackson — mixing that up produces confusing "cannot find symbol" errors.
+    -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>jakarta.validation</groupId>
+      <artifactId>jakarta.validation-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

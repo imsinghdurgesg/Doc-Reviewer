@@ -1,0 +1,80 @@
+# document-processing. Architecture §8.2, §26.
+#
+# Internal worker: management and job endpoints only, never exposed to the browser (§3).
+server:
+  port: 8081
+
+spring:
+  application:
+    name: document-processing
+  # See review-core: Boot 4's `spring.mongodb.*` supersedes `spring.data.mongodb.*`.
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017}
+    database: ${MONGODB_DATABASE:document_processing}
+  data:
+    mongodb:
+      auto-index-creation: true
+  threads:
+    virtual:
+      enabled: true
+
+docreview:
+  storage:
+    # minio or gcs (§41). MUST match review-core's value: this service reads back the objects
+    # review-core wrote, so a mismatch makes every parse fail with NoSuchKey against an object that
+    # exists in the other store.
+    provider: ${STORAGE_PROVIDER:minio}
+    gcs:
+      # Authentication is Application Default Credentials only — a workload identity or attached
+      # service account in deployment.
+      project-id: ${GCP_PROJECT_ID:}
+      bucket: ${GCS_BUCKET:}
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
+      bucket: ${MINIO_BUCKET:docreview}
+  services:
+    review-core:
+      # Where to read the active GCS bucket and model settings from (§22, §41). Blank means this
+      # service uses its own configuration, which is correct for a deployment that never repoints
+      # the bucket from the Admin screen.
+      base-url: ${REVIEW_CORE_BASE_URL:}
+
+  internal:
+    # Shared secret required on /internal/** (§9.2). §3 keeps this service off the host network, but
+    # network placement is not authentication. Blank fails startup rather than serving an
+    # unauthenticated job surface. Supplied as INTERNAL_SERVICE_TOKEN by compose (§27, §30).
+    service-token: ${INTERNAL_SERVICE_TOKEN:}
+  jobs:
+    # Bounded executor (§21 step 5). The worker returns 202 on claim and runs the work here, so this
+    # pool is what stops N concurrent dispatches from exhausting memory during parsing.
+    worker-threads: ${JOB_WORKER_THREADS:4}
+    queue-capacity: ${JOB_QUEUE_CAPACITY:32}
+    # Callback delivery back to review-core (§21 step 6).
+    callback-connect-timeout: ${CALLBACK_CONNECT_TIMEOUT:3s}
+    callback-read-timeout: ${CALLBACK_READ_TIMEOUT:10s}
+  # §14: every limit configurable. Untrusted uploads include decompression bombs and documents
+  # engineered to exhaust memory during parsing.
+  parsing:
+    max-upload-size-bytes: ${MAX_UPLOAD_BYTES:52428800}
+    max-uncompressed-bytes: ${MAX_UNCOMPRESSED_BYTES:524288000}
+    max-page-count: ${MAX_PAGE_COUNT:2000}
+    max-extracted-characters: ${MAX_EXTRACTED_CHARS:20000000}
+    max-table-cells: ${MAX_TABLE_CELLS:200000}
+    parser-timeout: ${PARSER_TIMEOUT:120s}
+    libreoffice-timeout: ${LIBREOFFICE_TIMEOUT:120s}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.app.docreview: INFO

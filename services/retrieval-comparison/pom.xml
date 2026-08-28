@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  retrieval-comparison. Architecture §8.3.
+
+  The ONLY service with LiteLLM credentials and the only one that talks to Qdrant. It holds two
+  logically separate modules in one deployable (§2): retrieval and comparison. Keeping them
+  separate in packages is what makes them separable later without moving service boundaries.
+
+  Spring AI is confined to the llm.litellm infrastructure package (§9). Application code depends on
+  the three gateway interfaces — EmbeddingGateway, RequirementExtractionModelGateway,
+  ComparisonModelGateway — so swapping the provider does not reach into domain logic.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.app.docreview</groupId>
+    <artifactId>document-standard-platform</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+  <artifactId>retrieval-comparison</artifactId>
+  <name>retrieval-comparison</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.app.docreview</groupId>
+      <artifactId>platform-contracts</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-mongodb</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!--
+      OpenAI-compatible client, pointed at LiteLLM. §2 forbids calling any provider directly, so
+      base-url is always the proxy — never api.openai.com or a Vertex/Azure endpoint.
+    -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-starter-model-openai</artifactId>
+    </dependency>
+
+    <!--
+      Qdrant Java client behind an application interface (§9.6). Deliberately NOT Spring AI's
+      VectorStore abstraction as the primary path: §5.4 requires named collections, payload
+      filters, and versioned score fusion, and a generic abstraction hides exactly those.
+    -->
+    <dependency>
+      <groupId>io.qdrant</groupId>
+      <artifactId>client</artifactId>
+    </dependency>
+
+    <!--
+      gRPC and protobuf are declared explicitly because the Qdrant client marks them RUNTIME scope.
+      Its generated message classes (Points$PointStruct, JsonWithInt$Value) extend protobuf types and
+      QdrantGrpcClient exposes io.grpc.ManagedChannel, so compiling against that API requires these
+      at COMPILE scope — otherwise javac reports "cannot access com.google.protobuf.GeneratedMessageV3"
+      while the jars sit in the local repository, which reads like a corrupt cache rather than a
+      scope problem.
+    -->
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-api</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-stub</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-protobuf</artifactId>
+      <version>${grpc.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.google.protobuf</groupId>
+      <artifactId>protobuf-java</artifactId>
+      <version>${protobuf.version}</version>
+    </dependency>
+    <!-- Transport, needed at runtime only. -->
+    <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty-shaded</artifactId>
+      <version>${grpc.version}</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!--
+      Structured output is validated against a protected JSON Schema before it is trusted (§18.1).
+      Provider "structured output" is best effort; this is the enforcement.
+    -->
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-spring-boot4</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.minio</groupId>
+      <artifactId>minio</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.app.docreview</groupId>
+      <artifactId>platform-test-support</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+    </plugins>
+  </build>
+</project>

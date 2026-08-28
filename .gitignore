@@ -1,0 +1,20 @@
+# Secrets. `.env` holds the LiteLLM key and every service password — it must never be committed,
+# and a key that lands in history stays there. `.env.example` IS committed: it documents the
+# required variables with placeholder values.
+.env
+.env.backup-*
+
+# Build output
+target/
+node_modules/
+dist/
+*.log
+
+# macOS Finder metadata. Written into any directory browsed in Finder, so it appears throughout the
+# tree rather than at the root.
+.DS_Store
+
+# IDE. Local to a developer's machine and frequently contains absolute paths.
+.idea/
+*.iml
+.vscode/

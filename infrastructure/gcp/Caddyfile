@@ -1,0 +1,36 @@
+# TLS terminator for the review workspace. Architecture §27, §7.4.
+#
+# Caddy obtains and renews a Let's Encrypt certificate automatically, which is why HTTPS is worth
+# the extra container: Google Identity Services requires a SECURE CONTEXT for the sign-in popup, so
+# plain HTTP means no SSO at all.
+
+# DOMAIN may list SEVERAL hostnames, comma-separated. Caddy treats a comma-separated site address as
+# multiple sites sharing one block and requests a certificate for each — which is what allows a
+# hostname to be cut over without a window where neither works: both serve until DNS and the OAuth
+# origins are confirmed on the new one, then the old one is dropped.
+{$DOMAIN} {
+	# Everything goes to the SPA container, which serves static assets and proxies /api itself.
+	# Splitting the proxy here would duplicate nginx's routing in a second place.
+	reverse_proxy review-web:8080
+
+	# Real client addresses in the logs. Behind Caddy every request otherwise appears to come from
+	# the Docker bridge, which makes an access log useless for tracing a report back to a session.
+	header {
+		# HSTS. Six months, because a downgrade to HTTP would break the sign-in popup's secure
+		# context as well as exposing session cookies.
+		Strict-Transport-Security "max-age=15552000"
+		# The SPA is never framed; this is the same stance review-core takes on its own responses.
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Removes the header advertising the server version.
+		-Server
+	}
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+}

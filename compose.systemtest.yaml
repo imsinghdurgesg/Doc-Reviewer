@@ -1,0 +1,35 @@
+# Enables the system-test authentication profile. Architecture §33.
+#
+# WHAT THIS DOES
+# --------------
+# review-core accepts locally-signed JWTs in place of Google ID tokens, so an automated test can
+# exercise the authenticated journey a reviewer actually takes: upload, processing, standard selection,
+# comparison, coverage, and reopening from History.
+#
+# WHAT IT DOES NOT DO
+# -------------------
+# It does not weaken authorization. The hosted-domain check, the invite-only allowlist, role mapping,
+# the disabled-user filter and every @PreAuthorize still apply — only the trust anchor for token
+# signatures changes. It is NOT demo basic auth: there are no seeded passwords and no form login.
+#
+# WHY A SEPARATE FILE
+# -------------------
+# Opt-in by explicit composition, so it cannot be reached by a stray environment variable:
+#
+#   docker compose -f compose.yaml -f compose.gcs.yaml -f compose.systemtest.yaml up -d review-core
+#
+# The repository's COMPOSE_FILE deliberately does NOT include this. Adding it there would make the test
+# profile part of the normal local stack, which is exactly the accident the double gating exists to
+# prevent.
+#
+# The signing key is generated in the container's memory at startup and never persisted, so a token
+# minted for one run cannot authenticate against another and there is no key material to leak.
+
+services:
+  review-core:
+    environment:
+      # BOTH are required. The profile alone does nothing without the property, and vice versa.
+      SPRING_PROFILES_ACTIVE: compose,system-test
+      # Bound in application.yml as docreview.security.system-test-signing. The hyphenated property
+      # does NOT relaxed-bind from DOCREVIEW_SECURITY_SYSTEM_TEST_SIGNING, so the mapping is explicit.
+      SYSTEM_TEST_SIGNING: enabled

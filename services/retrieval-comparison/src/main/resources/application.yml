@@ -1,0 +1,137 @@
+# retrieval-comparison. Architecture §8.3, §10, §26.
+#
+# The ONLY service holding LiteLLM credentials and the only one talking to Qdrant. §2 forbids
+# calling OpenAI, Vertex, or Azure directly — every model and embedding call goes through the
+# organizational proxy.
+server:
+  port: 8082
+
+spring:
+  application:
+    name: retrieval-comparison
+  # See review-core: Boot 4's `spring.mongodb.*` supersedes `spring.data.mongodb.*`.
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017}
+    database: ${MONGODB_DATABASE:retrieval_comparison}
+  data:
+    mongodb:
+      auto-index-creation: true
+  threads:
+    virtual:
+      enabled: true
+
+  ai:
+    openai:
+      # §10.3: the PROXY ROOT, not .../v1. The OpenAI client appends /v1/chat/completions and
+      # /v1/embeddings itself, so including /v1 here yields /v1/v1/... and a 404 that looks like a
+      # routing problem rather than a config one. If the organizational proxy is mounted under a
+      # path prefix, set the endpoint paths explicitly instead of appending to the base URL.
+      # Intentionally blank: the administrator's values are authoritative (§9.2, §30) and are
+      # applied per call from review-core. Spring AI requires the properties to exist, so these are
+      # placeholders — NOT a fallback. A blank base URL now FAILS the call (see
+      # RuntimeAiConfig.requireBaseUrl) instead of letting the client use its own default endpoint,
+      # which would send document text to a provider nobody configured (§35).
+      #
+      # A real value can still be supplied for local development against a private proxy.
+      base-url: ${LITELLM_BASE_URL:}
+      api-key: ${LITELLM_API_KEY:}
+      chat:
+        options:
+          # Stable application alias (§10.1), never a provider-specific model name. Swapping the
+          # underlying model is then a LiteLLM change, not an application release.
+          model: ${LITELLM_COMPARISON_MODEL:docreview-comparison}
+          # Low temperature for extraction and comparison (§10.4). Determinism is not achievable;
+          # versioned prompts plus saved results are what make a comparison auditable.
+          temperature: 0.1
+          max-tokens: ${LITELLM_MAX_TOKENS:6000}
+      embedding:
+        options:
+          model: ${LITELLM_EMBEDDING_MODEL:docreview-embedding}
+
+docreview:
+  ai:
+    timeout: ${LITELLM_TIMEOUT:60s}
+    # Extraction and comparison may point at the same underlying model for the MVP but stay
+    # independently configurable and versioned (§10.1) — they are tuned and evaluated separately.
+    models:
+      requirement-extraction: ${LITELLM_REQUIREMENT_EXTRACTION_MODEL:docreview-requirement-extractor}
+      comparison: ${LITELLM_COMPARISON_MODEL:docreview-comparison}
+      embedding: ${LITELLM_EMBEDDING_MODEL:docreview-embedding}
+      reranker: ${LITELLM_RERANKER_MODEL:}
+
+  # Spans are owned by document-processing (§22.2) and read through EvidenceSpanReader — never by
+  # querying another service's database directly.
+  services:
+    document-processing:
+      base-url: ${DOCUMENT_PROCESSING_URL:http://localhost:8081}
+      timeout: ${DOCUMENT_PROCESSING_TIMEOUT:30s}
+
+  internal:
+    # Shared secret required on /internal/** (§9.2). Matters most in this service: it is the only
+    # one holding the LiteLLM key (§8.3), so an unauthenticated dispatch is an unauthenticated route
+    # to model spend. Blank fails startup. Supplied as INTERNAL_SERVICE_TOKEN by compose (§27, §30).
+    service-token: ${INTERNAL_SERVICE_TOKEN:}
+
+  jobs:
+    # Bounded executor (§21 step 5). Deliberately smaller than document-processing's: each unit here
+    # is a chain of LiteLLM calls, so concurrency is limited by proxy rate limits and budget (§10.5)
+    # rather than by local CPU.
+    worker-threads: ${JOB_WORKER_THREADS:2}
+    queue-capacity: ${JOB_QUEUE_CAPACITY:32}
+    callback-connect-timeout: ${CALLBACK_CONNECT_TIMEOUT:3s}
+    callback-read-timeout: ${CALLBACK_READ_TIMEOUT:10s}
+    # Where review-core is. Used to fetch the administrator's model settings (§9.2) — the provider,
+    # key, and model aliases live in review-core's database, not here.
+    #
+    # The default is for running this service OUTSIDE a container, where review-core really is on
+    # localhost. In Compose it MUST come from the environment: `localhost` inside this container is
+    # this container, so the request would hit our own port 8080 and 404. That failure was silent —
+    # the fetch fell back to environment configuration, which meant an unset LITELLM_BASE_URL sent
+    # embedding calls to api.openai.com instead of the configured gateway.
+    callback-base-url: ${REVIEW_CORE_BASE_URL:http://localhost:8080}
+    # Requirements evaluated concurrently within ONE comparison (§10.5). Distinct from
+    # worker-threads, which is how many comparisons run at once: raising that does not speed up the
+    # comparison a reviewer is waiting on, and this does.
+    #
+    # Bounded by the shared proxy's rate limit rather than by CPU. Overshooting turns throughput into
+    # 429s, which appear to the reviewer as controls that could not be evaluated.
+    comparison-parallelism: ${COMPARISON_PARALLELISM:4}
+    # Cap on requirements evaluated per comparison. §15.5 forbids unbounded fan-out; without a cap a
+    # large standard set turns one upload into thousands of model calls.
+    #
+    # 120 is a deliberately CONSERVATIVE default for a shared organizational proxy: one comparison
+    # costs up to 120 comparison calls plus 120 embedding calls, and §18.4's single retry can add
+    # more. Raise it per-environment once real latency and budget are known — a default that is too
+    # low truncates visibly (the runner logs what it dropped), whereas one that is too high spends
+    # the budget before anyone notices.
+    max-requirements-per-comparison: ${MAX_REQUIREMENTS_PER_COMPARISON:120}
+
+  qdrant:
+    host: ${QDRANT_HOST:localhost}
+    port: ${QDRANT_PORT:6334}
+    use-tls: ${QDRANT_USE_TLS:false}
+    api-key: ${QDRANT_API_KEY:}
+
+  storage:
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
+      bucket: ${MINIO_BUCKET:docreview}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.app.docreview: INFO
+    # §10.5 / §35: never DEBUG in a shared environment. Spring AI logs request bodies at DEBUG, and
+    # those bodies contain confidential standard and process text.
+    org.springframework.ai: INFO

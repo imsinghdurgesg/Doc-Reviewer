@@ -1,0 +1,244 @@
+package com.app.docreview.reviewcore.comparison.application;
+
+import com.app.docreview.contracts.comparison.Finding;
+import com.app.docreview.contracts.job.ComparisonState;
+import com.app.docreview.reviewcore.comparison.domain.Comparison;
+import com.app.docreview.reviewcore.comparison.domain.ComparisonRepository;
+import com.app.docreview.reviewcore.shared.error.ApiException;
+import com.app.docreview.reviewcore.standards.domain.StandardVersion;
+import com.app.docreview.reviewcore.standards.repository.StandardVersionRepository;
+import com.app.docreview.reviewcore.upload.domain.UploadedDocument;
+import com.app.docreview.reviewcore.upload.domain.UploadedDocumentRepository;
+import com.app.docreview.reviewcore.workflow.JobDispatcher;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Comparison lifecycle. Architecture §8.1, §19.2, §20.2.
+ *
+ * <p>Creation enforces two preconditions that exist to prevent the same failure mode — a comparison
+ * that returns nothing and reads as full compliance:
+ *
+ * <ol>
+ *   <li><strong>The document must be processed.</strong> Without spans there is no evidence to
+ *       retrieve, so every requirement would come back MISSING (§17.5 makes this an
+ *       insufficient-evidence situation, not an absence one).</li>
+ *   <li><strong>Every standard must be comparable.</strong> §8.1 requires ACTIVE and INDEXED. An
+ *       unindexed standard has no extracted requirements, so it contributes no findings at all.</li>
+ * </ol>
+ *
+ * <p>Both are rejected at creation with a specific message rather than allowed to produce an empty
+ * result, because an empty result is indistinguishable from a clean review.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class ComparisonService {
+
+    private final ComparisonRepository comparisons;
+    private final UploadedDocumentRepository documents;
+    private final StandardVersionRepository standardVersions;
+    private final JobDispatcher jobDispatcher;
+
+    /**
+     * Creates a comparison and queues evaluation.
+     *
+     * @param standardVersionIds explicit selection; empty requests automatic selection (§15.1)
+     */
+    /**
+     * @param guidance optional reviewer assessment context. Stored on the comparison and passed to
+     *                 retrieval; blank is normalised to null so "not supplied" and "supplied empty"
+     *                 do not become two states meaning the same thing.
+     */
+    public Comparison create(String documentVersionId, List<String> standardVersionIds,
+                             String guidance, String actor) {
+        var document = documents.findByDocumentVersionId(documentVersionId)
+                .orElseThrow(() -> ApiException.notFound("Uploaded document"));
+
+        if (!document.readyForComparison()) {
+            throw ApiException.conflict("DOCUMENT_NOT_PROCESSED",
+                    "Document " + documentVersionId + " is " + document.getState()
+                            + " and has no evidence spans yet. Comparing now would report every "
+                            + "requirement as missing.");
+        }
+
+        var selected = standardVersionIds == null ? List.<String>of() : standardVersionIds;
+        requireComparableStandards(selected);
+
+        var comparison = comparisons.save(new Comparison(
+                "CMP-" + UUID.randomUUID().toString().substring(0, 12),
+                documentVersionId, selected, actor));
+
+        // Snapshot what we already know. The model, prompt, and index versions are filled in from
+        // the worker callback — §19.2 requires the full set, and the worker is the only place that
+        // knows which alias actually ran.
+        comparison.setChunkingStrategyVersion(document.getChunkingStrategyVersion());
+        comparison.setState(ComparisonState.SEARCHING_STANDARDS);
+
+        // Recorded BEFORE dispatch, so the stored context cannot disagree with the run it steered.
+        var trimmedGuidance = guidance == null || guidance.isBlank() ? null : guidance.trim();
+        comparison.setComparisonGuidance(trimmedGuidance);
+        comparisons.save(comparison);
+
+        jobDispatcher.dispatchRetrievalComparison(
+                comparison.getPublicId(), documentVersionId, selected, trimmedGuidance);
+
+        log.info("Created comparison {} for document {} against {} standard(s)",
+                comparison.getPublicId(), documentVersionId,
+                selected.isEmpty() ? "automatically selected" : selected.size());
+        return comparison;
+    }
+
+    public Comparison get(String publicId) {
+        return comparisons.findByPublicId(publicId)
+                .orElseThrow(() -> ApiException.notFound("Comparison"));
+    }
+
+    /**
+     * A comparison the caller is allowed to read. Architecture §33.
+     *
+     * <p><strong>NOT FOUND, not forbidden.</strong> A 403 confirms the comparison exists, which leaks
+     * that someone reviewed a particular document — and on a shared deployment the public id is
+     * guessable enough to probe. 404 is the same answer whether the review is absent or someone
+     * else's, so the response reveals nothing either way.
+     *
+     * <p>An unattributed comparison ({@code createdBy} null, from before attribution was recorded) is
+     * readable only when unrestricted. Treating a missing owner as "anyone may read it" would make
+     * legacy rows the one gap in this boundary.
+     *
+     * @param ownerOrNull the caller's identity, or null to bypass the check (administrators)
+     */
+    public Comparison getVisibleTo(String publicId, String ownerOrNull) {
+        var comparison = get(publicId);
+        if (ownerOrNull == null) {
+            return comparison;
+        }
+        if (!ownerOrNull.equals(comparison.getCreatedBy())) {
+            throw ApiException.notFound("Comparison");
+        }
+        return comparison;
+    }
+
+    /**
+     * One page of history, filtered and sorted by the database. Architecture §19.2.
+     *
+     * <p>Server-side rather than in the browser. A client-side filter needs the whole collection
+     * first, which means a capped fetch — and a cap silently hides older reviews, so a search for a
+     * comparison from last quarter returns nothing with no indication that anything was omitted.
+     *
+     * @param search    matched against filename and public id; blank matches everything
+     * @param status    a UI status group, or blank for all
+     * @param reference a standard version id to restrict to, or blank for all
+     * @param days      only reviews started within this many days, or null for all time
+     */
+    public org.springframework.data.domain.Page<Comparison> search(
+            String search, String status, String reference, Integer days,
+            String sort, int page, int size, String ownerOrNull) {
+
+        boolean searching = search != null && !search.isBlank();
+        // Quoted: a filename can legitimately contain regex metacharacters, and an unescaped "(" is
+        // an invalid pattern that fails the whole query rather than matching nothing.
+        String term = searching ? java.util.regex.Pattern.quote(search.trim()) : "";
+
+        // Filename lives on the document, so matching ids are resolved first. Empty when not
+        // searching, which the query then ignores entirely.
+        List<String> documentIds = searching
+                ? documents.findByFilenameContainingIgnoreCase(search.trim()).stream()
+                        .map(UploadedDocument::getDocumentVersionId).toList()
+                : List.of();
+
+        var createdAfter = days == null
+                ? java.time.Instant.EPOCH
+                : java.time.Instant.now().minus(java.time.Duration.ofDays(days));
+
+        var pageable = org.springframework.data.domain.PageRequest.of(page, size, sortFor(sort));
+
+        var states = statesFor(status);
+        return comparisons.search(term, documentIds, searching, states,
+                reference == null ? "" : reference, createdAfter, !states.isEmpty(),
+                // "" means unrestricted. The CALLER decides who may see everything — this method
+                // takes a plain filter so authorization stays where the principal is (§33).
+                ownerOrNull == null ? "" : ownerOrNull,
+                pageable);
+    }
+
+    /**
+     * Maps a UI status group to persisted states.
+     *
+     * <p>MISMATCHES and CLEAN are NOT states — they depend on the finding count — so they resolve to
+     * the terminal states here and are narrowed afterwards. Treating them as states would silently
+     * return nothing.
+     */
+    private List<String> statesFor(String status) {
+        if (status == null || status.isBlank() || "ALL".equals(status)) {
+            return List.of();
+        }
+        return switch (status) {
+            case "FAILED" -> List.of("FAILED");
+            case "RUNNING" -> List.of("PENDING", "RUNNING", "DISPATCHED", "RETRY_WAIT");
+            case "MISMATCHES", "CLEAN" -> List.of("COMPLETED", "PARTIALLY_COMPLETED");
+            default -> List.of();
+        };
+    }
+
+    private org.springframework.data.domain.Sort sortFor(String sort) {
+        return "OLDEST".equals(sort)
+                ? org.springframework.data.domain.Sort.by("createdAt").ascending()
+                : org.springframework.data.domain.Sort.by("createdAt").descending();
+    }
+
+    /**
+     * Recent comparisons, scoped to one owner unless {@code ownerOrNull} is null.
+     *
+     * <p>Null is unrestricted and is reserved for administrators: this list previously showed every
+     * reviewer the whole organization's activity.
+     */
+    public List<Comparison> recent(String ownerOrNull) {
+        return ownerOrNull == null
+                ? comparisons.findTop50ByOrderByCreatedAtDesc()
+                : comparisons.findTop50ByCreatedByOrderByCreatedAtDesc(ownerOrNull);
+    }
+
+    /**
+     * Finds one finding within a comparison.
+     *
+     * <p>Scoped to the comparison rather than looked up globally: a finding ID from another
+     * comparison must not resolve here, or the viewer would show evidence from a document the user
+     * did not open (§18.2).
+     */
+    public Finding finding(String publicId, String findingId) {
+        return get(publicId).getFindings().stream()
+                .filter(f -> findingId.equals(f.findingId()))
+                .findFirst()
+                .orElseThrow(() -> ApiException.notFound("Finding"));
+    }
+
+    public UploadedDocument document(String documentVersionId) {
+        return documents.findByDocumentVersionId(documentVersionId)
+                .orElseThrow(() -> ApiException.notFound("Uploaded document"));
+    }
+
+    public List<StandardVersion> standardVersions(List<String> ids) {
+        return standardVersions.findAllById(ids);
+    }
+
+    private void requireComparableStandards(List<String> standardVersionIds) {
+        for (String id : standardVersionIds) {
+            var version = standardVersions.findById(id)
+                    .orElseThrow(() -> ApiException.badRequest("UNKNOWN_STANDARD_VERSION",
+                            "Standard version " + id + " does not exist."));
+
+            if (!version.comparable()) {
+                throw ApiException.conflict("STANDARD_NOT_COMPARABLE",
+                        "Standard version " + version.getVersion() + " is "
+                                + version.getLifecycle() + "/" + version.getIndexingState()
+                                + ". An unindexed standard has no requirements, so the comparison "
+                                + "would produce no findings.");
+            }
+        }
+    }
+}

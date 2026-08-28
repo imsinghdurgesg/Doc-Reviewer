@@ -1,0 +1,329 @@
+# Local topology. Architecture §27.
+#
+# NOTE what is absent, deliberately (§2): no Kafka, no Redis, no Temporal server, no Postgres.
+# Durable orchestration is internal HTTP dispatch plus job state in MongoDB (§21).
+#
+# LiteLLM is NOT here either: it is an existing organizational service (§10), reached over the
+# network. Running a second proxy in front of it would add a hop and a second place for model
+# config to drift.
+#
+# EXPOSURE (§3): only review-web publishes a host port. The infrastructure ports below are bound to
+# 127.0.0.1 for local development convenience and MUST NOT be published on the GCP VM — that is what
+# compose.gcp-demo.yaml overrides.
+
+name: docreview
+
+services:
+  review-web:
+    build:
+      context: ./ui/review-web
+    ports:
+      - "${DOCREVIEW_HTTP_PORT:-8080}:8080"
+    depends_on:
+      review-core:
+        condition: service_started
+    networks: [docreview]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  review-core:
+    build:
+      # Repository ROOT: the Maven reactor needs the root pom and platform-contracts (§6).
+      context: .
+      dockerfile: services/review-core/Dockerfile
+    # Published for the system tests, which drive the API directly rather than through the SPA.
+    #
+    # BOUND TO LOOPBACK. review-web on :8080 is the only browser-facing surface (§3); these are
+    # developer access to service APIs and must not be reachable from the network. Without the bind
+    # address Docker publishes on 0.0.0.0 and bypasses the host firewall.
+    #
+    # 8081 rather than 8080 because review-web holds 8080 and moving it would change the URL every
+    # developer and OAuth origin already uses. The system tests read REVIEW_CORE_URL, so the mapping
+    # and the tests are configured from one place.
+    ports:
+      - "127.0.0.1:${REVIEW_CORE_HTTP_PORT:-8081}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: compose
+      # Canonical Spring property, set directly. `MONGODB_URI` is also present in .env
+      # pointing at localhost for IDE runs (§26.1), and env_file values reach the container
+      # too — so relying on the ${MONGODB_URI} placeholder here resolves to localhost and
+      # the driver silently tries to reach Mongo inside its own container.
+      # Username and password are passed SEPARATELY, not interpolated into the URI.
+      #
+      # A password containing a URI-structural character breaks the connection string: a generated
+      # secret with a "/" in it made Boot fail with "The connection string contains an invalid
+      # host" — the / terminated the host section. Percent-encoding in the compose file is not
+      # possible (there is no shell to encode with), so the credentials are handed to Spring as
+      # discrete properties and it builds the URI correctly whatever the password contains.
+      # Credentials IN the URI: Boot ignores spring.mongodb.username/password whenever
+      # spring.mongodb.uri is set, and the URI must be set explicitly because .env carries
+      # MONGODB_URI=localhost for IDE runs (§26.1) and env_file values reach the container.
+      #
+      # The password must therefore contain no URI-structural character. A generated secret with a
+      # "/" in it broke this ("The connection string contains an invalid host"), so the deployment
+      # generates alphanumeric-only passwords -- see infrastructure/gcp/create-secrets.sh.
+      SPRING_MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-docreview}:${MONGO_ROOT_PASSWORD:-change-me}@mongodb:27017/review_core?authSource=admin
+      SPRING_MONGODB_DATABASE: review_core
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-docreview}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-change-me}
+      DOCUMENT_PROCESSING_URL: http://document-processing:8080
+      RETRIEVAL_COMPARISON_URL: http://retrieval-comparison:8080
+      # Must be resolvable FROM the workers, so a service name rather than localhost (§20.3).
+      REVIEW_CORE_BASE_URL: http://review-core:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}
+      # Passed through, NOT required by compose.
+      #
+      # `:?` here would refuse to start the stack under SECURITY_MODE=sso, where these are
+      # meaningless — an SSO deployment would be forced to invent three unused passwords. The
+      # requirement still holds where it belongs: DemoUserProperties.validate() fails startup on a
+      # blank password, and it only runs when the demo chain is active (§33). Demo mode is therefore
+      # still incapable of starting with a guessable credential.
+      DEMO_ADMIN_PASSWORD: ${DEMO_ADMIN_PASSWORD:-}
+      DEMO_STANDARDS_ADMIN_PASSWORD: ${DEMO_STANDARDS_ADMIN_PASSWORD:-}
+      DEMO_REVIEWER_PASSWORD: ${DEMO_REVIEWER_PASSWORD:-}
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-50MB}
+      JOB_MAX_ATTEMPTS: ${JOB_MAX_ATTEMPTS:-3}
+      JOB_STALE_AFTER: ${JOB_STALE_AFTER:-15m}
+
+      # --- Object storage (§41) ---
+      # Defaults keep the Compose stack on MinIO. Setting STORAGE_PROVIDER=gcs in .env switches the
+      # object store without a rebuild; both adapters are in the image.
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCS_BUCKET: ${GCS_BUCKET:-}
+      GCS_STANDARDS_PREFIX: ${GCS_STANDARDS_PREFIX:-standards/}
+      STANDARDS_SYNC_INTERVAL: ${STANDARDS_SYNC_INTERVAL:-PT5M}
+      STANDARDS_SYNC_INITIAL_DELAY: ${STANDARDS_SYNC_INITIAL_DELAY:-PT1M}
+      # Where ADC credentials are found inside the container. The file itself is mounted by
+      # compose.gcs.yaml, which is opt-in — see the note on that file.
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/application_default_credentials.json
+
+      # --- Authentication (§33) ---
+      # demo by default. SECURITY_MODE=sso activates the Google chain; the client registration only
+      # exists in that mode, so blank credentials here are correct and harmless under demo.
+      SECURITY_MODE: ${SECURITY_MODE:-demo}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_AUTH_METHOD: ${GOOGLE_CLIENT_AUTH_METHOD:-none}
+      SSO_HOSTED_DOMAIN: ${SSO_HOSTED_DOMAIN:-}
+      SSO_ADMIN_EMAILS: ${SSO_ADMIN_EMAILS:-}
+      SSO_STANDARDS_ADMIN_EMAILS: ${SSO_STANDARDS_ADMIN_EMAILS:-}
+
+      # Encrypts the AI provider API key at rest (§30). Blank means Admin refuses to store one
+      # rather than writing it to Mongo in plaintext.
+      DOCREVIEW_SECRET_KEY: ${DOCREVIEW_SECRET_KEY:-}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    # `expose`, not `ports`: reachable on the Docker network only (§3).
+    expose: ["8080"]
+    networks: [docreview]
+    restart: unless-stopped
+
+  document-processing:
+    build:
+      context: .
+      dockerfile: services/document-processing/Dockerfile
+    # Loopback only — an internal worker, never browser-facing (§3).
+    ports:
+      - "127.0.0.1:${DOCUMENT_PROCESSING_HTTP_PORT:-8082}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: compose
+      SERVER_PORT: 8080
+      # Canonical Spring property, set directly. `MONGODB_URI` is also present in .env
+      # pointing at localhost for IDE runs (§26.1), and env_file values reach the container
+      # too — so relying on the ${MONGODB_URI} placeholder here resolves to localhost and
+      # the driver silently tries to reach Mongo inside its own container.
+      # See review-core: discrete properties, so a password with a "/" cannot corrupt the URI.
+      # Credentials IN the URI: Boot ignores spring.mongodb.username/password whenever
+      # spring.mongodb.uri is set, and the URI must be set explicitly because .env carries
+      # MONGODB_URI=localhost for IDE runs (§26.1) and env_file values reach the container.
+      #
+      # The password must therefore contain no URI-structural character. A generated secret with a
+      # "/" in it broke this ("The connection string contains an invalid host"), so the deployment
+      # generates alphanumeric-only passwords -- see infrastructure/gcp/create-secrets.sh.
+      SPRING_MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-docreview}:${MONGO_ROOT_PASSWORD:-change-me}@mongodb:27017/document_processing?authSource=admin
+      SPRING_MONGODB_DATABASE: document_processing
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-docreview}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-change-me}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}
+      # Parsing is CPU- and memory-bound, so this bound is about local resources (§21 step 5).
+      JOB_WORKER_THREADS: ${DOC_JOB_WORKER_THREADS:-4}
+
+      # --- Object storage (§41) ---
+      # MUST match review-core. This service reads back what review-core wrote, so a mismatch makes
+      # every parse fail with NoSuchKey against an object that exists in the other store.
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-minio}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCS_BUCKET: ${GCS_BUCKET:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/application_default_credentials.json
+      # So this service can read the ACTIVE bucket, which an administrator may have repointed.
+      REVIEW_CORE_BASE_URL: http://review-core:8080
+      MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-52428800}
+      MAX_PAGE_COUNT: ${MAX_PAGE_COUNT:-2000}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    expose: ["8080"]
+    networks: [docreview]
+    restart: unless-stopped
+
+  retrieval-comparison:
+    build:
+      context: .
+      dockerfile: services/retrieval-comparison/Dockerfile
+    # Loopback only — an internal worker, never browser-facing (§3).
+    ports:
+      - "127.0.0.1:${RETRIEVAL_COMPARISON_HTTP_PORT:-8083}:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: compose
+      SERVER_PORT: 8080
+      # Canonical Spring property, set directly. `MONGODB_URI` is also present in .env
+      # pointing at localhost for IDE runs (§26.1), and env_file values reach the container
+      # too — so relying on the ${MONGODB_URI} placeholder here resolves to localhost and
+      # the driver silently tries to reach Mongo inside its own container.
+      # See review-core: discrete properties, so a password with a "/" cannot corrupt the URI.
+      # Credentials IN the URI: Boot ignores spring.mongodb.username/password whenever
+      # spring.mongodb.uri is set, and the URI must be set explicitly because .env carries
+      # MONGODB_URI=localhost for IDE runs (§26.1) and env_file values reach the container.
+      #
+      # The password must therefore contain no URI-structural character. A generated secret with a
+      # "/" in it broke this ("The connection string contains an invalid host"), so the deployment
+      # generates alphanumeric-only passwords -- see infrastructure/gcp/create-secrets.sh.
+      SPRING_MONGODB_URI: mongodb://${MONGO_ROOT_USERNAME:-docreview}:${MONGO_ROOT_PASSWORD:-change-me}@mongodb:27017/retrieval_comparison?authSource=admin
+      SPRING_MONGODB_DATABASE: retrieval_comparison
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-docreview}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-change-me}
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6334
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      DOCUMENT_PROCESSING_URL: http://document-processing:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set}
+      # Required, not optional: this is how the worker reads the administrator's model settings.
+      # Without it the property defaults to `localhost`, which in a container is THIS service — the
+      # fetch 404s, silently falls back to the env values below, and comparisons fail with a
+      # provider error that points at the key rather than at the missing URL.
+      REVIEW_CORE_BASE_URL: http://review-core:8080
+      # BOOTSTRAP provider values. Architecture §9.2, §10.3, §30.
+      #
+      # The administered configuration under Admin -> AI & matching is authoritative and is what the
+      # chat gateways use per call. These exist because EMBEDDINGS cannot be repointed per request:
+      # OpenAiEmbeddingModel binds its client at construction, so its provider has to be present as
+      # configuration when the bean is built. Leaving them blank makes embedding calls default to
+      # api.openai.com, which fails as a missing-key error naming a provider nobody configured.
+      #
+      # CONSEQUENCE: changing the provider in Admin needs a restart of this service before embeddings
+      # follow. Comparisons (chat) switch immediately.
+      #
+      # Blank is still a supported deployment — it fails loudly at the first embedding call rather
+      # than at startup, which keeps a key from being required to boot.
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-}
+      LITELLM_API_KEY: ${LITELLM_API_KEY:-}
+      LITELLM_REQUIREMENT_EXTRACTION_MODEL: ${LITELLM_REQUIREMENT_EXTRACTION_MODEL:-docreview-requirement-extractor}
+      LITELLM_COMPARISON_MODEL: ${LITELLM_COMPARISON_MODEL:-docreview-comparison}
+      LITELLM_EMBEDDING_MODEL: ${LITELLM_EMBEDDING_MODEL:-docreview-embedding}
+      LITELLM_RERANKER_MODEL: ${LITELLM_RERANKER_MODEL:-}
+      LITELLM_TIMEOUT: ${LITELLM_TIMEOUT:-60s}
+      LITELLM_MAX_TOKENS: ${LITELLM_MAX_TOKENS:-6000}
+      # Lower than document-processing on purpose: each unit is a chain of proxy calls, so the bound
+      # is rate limits and budget rather than CPU (§10.5).
+      JOB_WORKER_THREADS: ${JOB_WORKER_THREADS:-2}
+      MAX_REQUIREMENTS_PER_COMPARISON: ${MAX_REQUIREMENTS_PER_COMPARISON:-120}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      qdrant:
+        condition: service_healthy
+    expose: ["8080"]
+    networks: [docreview]
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:8
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-docreview}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-change-me}
+    # Bound to loopback: reachable from the developer's tools, not from the network (§3).
+    ports: ["127.0.0.1:27017:27017"]
+    volumes: [mongodata:/data/db]
+    networks: [docreview]
+    healthcheck:
+      # A TCP check passes before Mongo accepts queries; ping proves it is actually serving.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-docreview}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes: [miniodata:/data]
+    networks: [docreview]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # Short-lived: creates the §23 buckets, then exits. App services gate on its SUCCESSFUL completion,
+  # so none of them can start against missing buckets.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-docreview}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-me}
+    volumes:
+      - ./infrastructure/minio/init.sh:/init.sh:ro
+    # Overrides the mc image's default entrypoint, which would otherwise treat the script path as an
+    # mc subcommand.
+    entrypoint: ["/bin/sh", "/init.sh"]
+    networks: [docreview]
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "127.0.0.1:6333:6333"   # REST
+      - "127.0.0.1:6334:6334"   # gRPC — what the Java client uses (§13.5)
+    volumes: [qdrantdata:/qdrant/storage]
+    networks: [docreview]
+    healthcheck:
+      # The image ships no curl or wget — only sh and bash. /dev/tcp is a BASH builtin, so the
+      # probe must run under bash; under sh it fails and the container reports "health: starting"
+      # forever while the service is in fact serving requests.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+networks:
+  docreview:
+    driver: bridge
+
+volumes:
+  mongodata:
+  miniodata:
+  qdrantdata:

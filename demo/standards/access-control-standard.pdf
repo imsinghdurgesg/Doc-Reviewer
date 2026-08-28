@@ -1,0 +1,171 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 2 /Kids [4 0 R 6 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1776 >>
+stream
+BT
+/F1 11 Tf
+15.5 TL
+1 0 0 1 62 730 Tm
+(Information Access Control Standard) Tj
+T*
+() Tj
+T*
+(Standard ID: GRC-AC-2026) Tj
+T*
+(Version: 1.0) Tj
+T*
+(Owner: Information Security) Tj
+T*
+(Effective Date: 2026-01-01) Tj
+T*
+(Classification: Internal) Tj
+T*
+() Tj
+T*
+(1. Purpose and Scope) Tj
+T*
+() Tj
+T*
+(This standard defines the mandatory controls governing access to production systems and) Tj
+T*
+(confidential data. It applies to all employees, contractors, and third parties who are) Tj
+T*
+(granted access to organizational information systems.) Tj
+T*
+() Tj
+T*
+(2. Definitions) Tj
+T*
+() Tj
+T*
+(An "account" is any credential permitting authentication to a system. A "privileged) Tj
+T*
+(account" is any account holding administrative rights. "Access review" means a documented) Tj
+T*
+(confirmation that a person's access remains appropriate for their role.) Tj
+T*
+() Tj
+T*
+(3. Account Provisioning) Tj
+T*
+() Tj
+T*
+(3.1 Access must be approved by the data owner before the account is created.) Tj
+T*
+() Tj
+T*
+(3.2 Access must be granted on the principle of least privilege. A person must receive only) Tj
+T*
+(the permissions required to perform their role.) Tj
+T*
+() Tj
+T*
+(3.3 Shared accounts must not be used for privileged access. Every privileged action must be) Tj
+T*
+(attributable to one named individual.) Tj
+T*
+() Tj
+T*
+(4. Authentication) Tj
+T*
+() Tj
+T*
+(4.1 Multi-factor authentication must be enforced for all remote access to production) Tj
+T*
+(systems.) Tj
+T*
+() Tj
+T*
+(4.2 Passwords must be at least twelve characters in length.) Tj
+T*
+() Tj
+T*
+(4.3 Passwords must not be transmitted or stored in plain text.) Tj
+T*
+() Tj
+T*
+(5. Access Review and Revocation) Tj
+T*
+() Tj
+T*
+(5.1 Access rights must be reviewed at least quarterly by the data owner.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 742 >>
+stream
+BT
+/F1 11 Tf
+15.5 TL
+1 0 0 1 62 730 Tm
+(5.2 Access must be revoked within twenty-four hours of a person leaving the organization.) Tj
+T*
+() Tj
+T*
+(5.3 The results of each access review must be recorded, including the reviewer identity and) Tj
+T*
+(the date of review.) Tj
+T*
+() Tj
+T*
+(6. Privileged Access) Tj
+T*
+() Tj
+T*
+(6.1 Privileged access must be time-limited and granted only for the duration of the) Tj
+T*
+(approved task.) Tj
+T*
+() Tj
+T*
+(6.2 All privileged sessions must be logged, and session logs must be retained for twelve) Tj
+T*
+(months.) Tj
+T*
+() Tj
+T*
+(7. Guidance) Tj
+T*
+() Tj
+T*
+(Teams should consider adopting hardware security keys where practical. This is a) Tj
+T*
+(recommendation and is not a mandatory control.) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002145 00000 n 
+0000002271 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+3064
+%%EOF

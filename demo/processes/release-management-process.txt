@@ -1,0 +1,38 @@
+Production Release Management Process
+
+Document Owner: Platform Engineering
+Last Reviewed: 2026-02-15
+
+1. Purpose
+
+This process describes how the Platform Engineering team releases changes to production
+services.
+
+2. Scope
+
+Applies to all application deployments to the production environment.
+
+3. Release Authorisation
+
+3.1 Production releases require authorisation by a release manager who did not implement
+the change.
+
+3.2 The release manager records their approval in the deployment ticket before the
+release pipeline is triggered.
+
+4. Pre-Release Verification
+
+4.1 All changes are deployed to the staging environment and verified by the implementing
+engineer before a production release is scheduled.
+
+4.2 The engineer confirms that a rollback approach exists before deploying. Rollback
+steps are discussed during the release call.
+
+5. Emergency Releases
+
+5.1 Emergency releases may be deployed immediately at the discretion of the on-call
+engineer.
+
+6. Related Documents
+
+Detailed approval thresholds are defined in SOP OPS-174.

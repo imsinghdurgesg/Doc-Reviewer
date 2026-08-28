@@ -1,0 +1,120 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 1 /Kids [4 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1877 >>
+stream
+BT
+/F1 11 Tf
+15.5 TL
+1 0 0 1 62 730 Tm
+(Technology Change Management Standard) Tj
+T*
+() Tj
+T*
+(Version 2.4) Tj
+T*
+(Owner: Technology Governance) Tj
+T*
+(Effective Date: 2026-01-01) Tj
+T*
+() Tj
+T*
+(1. Purpose and Scope) Tj
+T*
+() Tj
+T*
+(This standard defines the mandatory controls for authorising, testing, and deploying) Tj
+T*
+(changes to production technology services. It applies to all production changes,) Tj
+T*
+(including application releases, infrastructure changes, and configuration changes.) Tj
+T*
+() Tj
+T*
+(2. Definitions) Tj
+T*
+() Tj
+T*
+(A "change" is any addition, modification, or removal of a production service component.) Tj
+T*
+(An "implementer" is the individual who performs the change. An "approver" is the) Tj
+T*
+(individual accountable for authorising the change.) Tj
+T*
+() Tj
+T*
+(3. Approval) Tj
+T*
+() Tj
+T*
+(3.1 Changes must be approved before deployment to production.) Tj
+T*
+() Tj
+T*
+(3.2 The approver must be independent of the implementing engineer. A change must not be) Tj
+T*
+(approved by the person who implemented it.) Tj
+T*
+() Tj
+T*
+(3.3 Approval evidence must be recorded in the change record, including the approver) Tj
+T*
+(identity and the approval timestamp.) Tj
+T*
+() Tj
+T*
+(4. Testing and Rollback) Tj
+T*
+() Tj
+T*
+(4.1 Changes must be tested in a non-production environment before deployment.) Tj
+T*
+() Tj
+T*
+(4.2 A documented rollback plan must be attached to the change record before deployment.) Tj
+T*
+(The rollback plan must identify the steps required to restore the previous service state.) Tj
+T*
+() Tj
+T*
+(4.3 Emergency changes may be deployed before formal approval, but must receive) Tj
+T*
+(retrospective review within two business days.) Tj
+T*
+() Tj
+T*
+(5. Guidance) Tj
+T*
+() Tj
+T*
+(Teams should consider deploying during low-traffic windows where practical. This is a) Tj
+T*
+(recommendation and not a mandatory control.) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000185 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2240
+%%EOF

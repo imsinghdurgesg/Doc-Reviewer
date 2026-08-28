@@ -1,0 +1,144 @@
+# review-core. Architecture §8.1, §26.
+#
+# The only service the browser reaches (§3). No Spring AI configuration here by design: review-core
+# holds no model credentials, so a model call from this service is impossible rather than merely
+# discouraged.
+server:
+  port: 8080
+
+spring:
+  application:
+    name: review-core
+  # Boot 4 promoted `spring.mongodb.*` and deprecated `spring.data.mongodb.*`. When both are
+  # bindable the NEW namespace wins, so connection settings written under the old one are silently
+  # ignored and the driver falls back to localhost — inside the container, which refuses.
+  mongodb:
+    uri: ${MONGODB_URI:mongodb://localhost:27017}
+    database: ${MONGODB_DATABASE:review_core}
+  data:
+    mongodb:
+      # Still on the Spring DATA namespace: this is a Spring Data mapping concern, not a connection
+      # one. Without it the @Indexed/@CompoundIndex definitions that enforce standardKey uniqueness
+      # and job idempotency are never created.
+      auto-index-creation: true
+  servlet:
+    multipart:
+      max-file-size: ${MAX_UPLOAD_SIZE:50MB}
+      max-request-size: ${MAX_UPLOAD_SIZE:50MB}
+  threads:
+    virtual:
+      enabled: true
+docreview:
+  storage:
+    # minio or gcs (§41). MinIO is the default so local development and the Compose stack are
+    # unaffected; both adapters ship in the image, so the deployment target is configuration rather
+    # than a separate build.
+    provider: ${STORAGE_PROVIDER:minio}
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
+      bucket: ${MINIO_BUCKET:docreview}
+    gcs:
+      # Authentication is Application Default Credentials only — a workload identity or attached
+      # service account in deployment, `gcloud auth application-default login` locally. There is
+      # deliberately no service-account-JSON option: a downloaded private key is the credential most
+      # likely to end up in a ticket, a log, or an image layer.
+      project-id: ${GCP_PROJECT_ID:}
+      bucket: ${GCS_BUCKET:}
+      standards-prefix: ${GCS_STANDARDS_PREFIX:standards/}
+
+  standards:
+    sync:
+      # Reconciliation cadence (§41). Each pass lists the standards prefix and ingests whatever is
+      # not already present by content hash, so it is idempotent and holds no cursor to lose.
+      interval: ${STANDARDS_SYNC_INTERVAL:PT5M}
+      # Keeps the first pass off the startup path: ingesting a bucket during startup would delay
+      # readiness behind an unbounded amount of parsing.
+      initial-delay: ${STANDARDS_SYNC_INITIAL_DELAY:PT1M}
+  # Encryption key for secrets stored in Mongo — currently the AI provider API key (§30).
+  # 32 random bytes, base64: `openssl rand -base64 32`. Blank means provider keys cannot be stored
+  # through Admin at all; the feature refuses rather than falling back to plaintext.
+  #
+  # Rotating it makes previously stored keys undecryptable by design (AES-GCM authenticates), so the
+  # provider key must be re-entered in Admin after a rotation.
+
+  ai:
+    # Environment fallback, used until an administrator configures a provider through Admin.
+    base-url: ${LITELLM_BASE_URL:}
+    api-key: ${LITELLM_API_KEY:}
+
+  security:
+    secret-key: ${DOCREVIEW_SECRET_KEY:}
+    # demo or sso (§33). Demo simplifies AUTHENTICATION only — authorization is fully enforced in
+    # both modes, and the role rules are identical, so the checks are exercised from the start
+    # rather than appearing for the first time in production.
+    mode: ${SECURITY_MODE:demo}
+    # Accepts locally-signed JWTs instead of Google ID tokens, for automated system tests only (§33).
+    #
+    # Declared here with an EXPLICIT env-var binding rather than relying on relaxed binding: the
+    # hyphenated form does not bind from DOCREVIEW_SECURITY_SYSTEM_TEST_SIGNING, so an operator
+    # setting that variable and expecting it to work would get silence. Naming the mapping makes the
+    # switch real or absent, never half-applied.
+    #
+    # Requires the `system-test` profile as well, and authorization is unaffected in either case.
+    system-test-signing: ${SYSTEM_TEST_SIGNING:disabled}
+    demo:
+      # No defaults. A blank value fails startup rather than seeding a guessable password (§33).
+      admin-password: ${DEMO_ADMIN_PASSWORD:}
+      standards-admin-password: ${DEMO_STANDARDS_ADMIN_PASSWORD:}
+      reviewer-password: ${DEMO_REVIEWER_PASSWORD:}
+    sso:
+      # The OAuth client id. Every accepted ID token must name this as its `aud`, or a token minted
+      # for a DIFFERENT application would verify against Google's keys, name a real stanford.edu
+      # user, and be accepted here. Blank fails startup.
+      client-id: ${GOOGLE_CLIENT_ID:}
+      # The Workspace domain users must belong to, enforced on the ID token's `hd` claim. Blank fails
+      # startup rather than admitting every Google account on the internet.
+      hosted-domain: ${SSO_HOSTED_DOMAIN:}
+      # Comma-separated allowlists. Every authenticated user is a REVIEWER; these two roles are
+      # additive because they can change the standards a review is measured against (§33).
+      # ADMIN implies STANDARDS_ADMIN.
+      admin-emails: ${SSO_ADMIN_EMAILS:}
+      standards-emails: ${SSO_STANDARDS_ADMIN_EMAILS:}
+
+  # Internal HTTP job dispatch (§9.2). No message broker in the MVP (§2).
+  services:
+    document-processing:
+      base-url: ${DOCUMENT_PROCESSING_URL:http://localhost:8081}
+    retrieval-comparison:
+      base-url: ${RETRIEVAL_COMPARISON_URL:http://localhost:8082}
+
+  jobs:
+    document-processing:
+      base-url: ${DOCUMENT_PROCESSING_URL:http://localhost:8081}
+    retrieval-comparison:
+      base-url: ${RETRIEVAL_COMPARISON_URL:http://localhost:8082}
+    # Shared secret for worker calls (§9.2). Blank fails startup: workers reject unauthenticated
+    # dispatch, so a blank token would mean every job fails at the first upload instead of at boot.
+    internal-service-token: ${INTERNAL_SERVICE_TOKEN:}
+    # What review-core advertises to workers as its own address for callbacks (§20.3). Must be
+    # resolvable FROM the worker containers, so it is a service name under Compose, not localhost.
+    callback-base-url: ${REVIEW_CORE_BASE_URL:http://localhost:8080}
+    # Short by design: a worker answers 202 on claim (§21 step 4), so a slow response means an
+    # unhealthy worker rather than long-running work.
+    connect-timeout: ${JOB_DISPATCH_CONNECT_TIMEOUT:3s}
+    read-timeout: ${JOB_DISPATCH_READ_TIMEOUT:10s}
+    max-attempts: ${JOB_MAX_ATTEMPTS:3}
+    stale-after: ${JOB_STALE_AFTER:15m}
+    # Recovery sweep cadence (§21 step 8). ISO-8601 because @Scheduled parses durations that way.
+    sweep-interval: ${JOB_SWEEP_INTERVAL:PT2M}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+logging:
+  level:
+    com.app.docreview: INFO

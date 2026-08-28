@@ -1,0 +1,157 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 2 /Kids [4 0 R 6 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1775 >>
+stream
+BT
+/F1 11 Tf
+15.5 TL
+1 0 0 1 62 730 Tm
+(User Access Management Procedure) Tj
+T*
+() Tj
+T*
+(Document Owner: Platform Operations) Tj
+T*
+(Last Reviewed: 2026-02-10) Tj
+T*
+(Applies To: Production systems operated by Platform Operations) Tj
+T*
+() Tj
+T*
+(1. Purpose) Tj
+T*
+() Tj
+T*
+(This procedure describes how the Platform Operations team requests, grants, reviews, and) Tj
+T*
+(removes access to the production environment.) Tj
+T*
+() Tj
+T*
+(2. Scope) Tj
+T*
+() Tj
+T*
+(Covers all production systems managed by Platform Operations, including application) Tj
+T*
+(servers, databases, and the container platform.) Tj
+T*
+() Tj
+T*
+(3. Requesting Access) Tj
+T*
+() Tj
+T*
+(3.1 Access requests are raised in the service desk tool. The data owner approves each access) Tj
+T*
+(request before the account is created.) Tj
+T*
+() Tj
+T*
+(3.2 Permissions are granted according to the requester's job role. Each role grants only the) Tj
+T*
+(permissions that role requires to carry out its duties.) Tj
+T*
+() Tj
+T*
+(3.3 A shared ops-admin account is used by the on-call team for administrative tasks on) Tj
+T*
+(production servers. The account credentials are stored in the team password vault.) Tj
+T*
+() Tj
+T*
+(4. Authentication) Tj
+T*
+() Tj
+T*
+(4.1 Multi-factor authentication is enforced for VPN access to the corporate network.) Tj
+T*
+() Tj
+T*
+(4.2 Passwords must be at least eight characters in length.) Tj
+T*
+() Tj
+T*
+(4.3 Credentials are never written into configuration files or source control. Secrets are) Tj
+T*
+(held in the platform secret store.) Tj
+T*
+() Tj
+T*
+(5. Access Review) Tj
+T*
+() Tj
+T*
+(5.1 The team lead reviews production access annually as part of the yearly compliance) Tj
+T*
+(exercise.) Tj
+T*
+() Tj
+T*
+(5.2 Review outcomes are noted in the compliance ticket.) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 449 >>
+stream
+BT
+/F1 11 Tf
+15.5 TL
+1 0 0 1 62 730 Tm
+(6. Privileged Operations) Tj
+T*
+() Tj
+T*
+(6.1 Elevation to administrative rights follows the rules defined in SOP SEC-091.) Tj
+T*
+() Tj
+T*
+(6.2 Administrative sessions on production hosts are logged by the bastion service.) Tj
+T*
+() Tj
+T*
+(7. Onboarding) Tj
+T*
+() Tj
+T*
+(7.1 New joiners are granted access once their manager confirms their start date and the data) Tj
+T*
+(owner approves the request.) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002144 00000 n 
+0000002270 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+2770
+%%EOF

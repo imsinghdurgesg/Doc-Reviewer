@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cross-service journeys. Architecture §36.
+
+  Depends on CONTRACTS and test support only — never on a service implementation jar (§6). A system
+  test that imports a service's internals stops being a black-box test of the deployed topology.
+
+  Skipped by default: these need the Compose stack running. Enable with -Dsystem.tests=true.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>com.app.docreview</groupId>
+    <artifactId>document-standard-platform</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+  <artifactId>system-tests</artifactId>
+  <name>system-tests</name>
+
+  <properties>
+    <system.tests>false</system.tests>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.app.docreview</groupId>
+      <artifactId>platform-contracts</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.app.docreview</groupId>
+      <artifactId>platform-test-support</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!--
+      Drives the deployed topology over HTTP. RestClient rather than a service's own client class:
+      §6 forbids depending on a service jar, and a system test that shares the production client
+      would not notice a change that breaks every other caller.
+    -->
+    <!-- Reading the labelled retrieval set and the candidate responses. spring-boot-starter-test
+         brings Jackson transitively for some setups but not reliably, so it is declared. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-web</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <skipTests>${system.tests.skip}</skipTests>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <profiles>
+    <profile>
+      <id>default-skip-system-tests</id>
+      <activation><activeByDefault>true</activeByDefault></activation>
+      <properties><system.tests.skip>true</system.tests.skip></properties>
+    </profile>
+    <profile>
+      <id>run-system-tests</id>
+      <activation><property><name>system.tests</name><value>true</value></property></activation>
+      <properties><system.tests.skip>false</system.tests.skip></properties>
+    </profile>
+  </profiles>
+</project>

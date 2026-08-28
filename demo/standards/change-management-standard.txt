@@ -1,0 +1,42 @@
+Technology Change Management Standard
+
+Version 2.4
+Owner: Technology Governance
+Effective Date: 2026-01-01
+
+1. Purpose and Scope
+
+This standard defines the mandatory controls for authorising, testing, and deploying
+changes to production technology services. It applies to all production changes,
+including application releases, infrastructure changes, and configuration changes.
+
+2. Definitions
+
+A "change" is any addition, modification, or removal of a production service component.
+An "implementer" is the individual who performs the change. An "approver" is the
+individual accountable for authorising the change.
+
+3. Approval
+
+3.1 Changes must be approved before deployment to production.
+
+3.2 The approver must be independent of the implementing engineer. A change must not be
+approved by the person who implemented it.
+
+3.3 Approval evidence must be recorded in the change record, including the approver
+identity and the approval timestamp.
+
+4. Testing and Rollback
+
+4.1 Changes must be tested in a non-production environment before deployment.
+
+4.2 A documented rollback plan must be attached to the change record before deployment.
+The rollback plan must identify the steps required to restore the previous service state.
+
+4.3 Emergency changes may be deployed before formal approval, but must receive
+retrospective review within two business days.
+
+5. Guidance
+
+Teams should consider deploying during low-traffic windows where practical. This is a
+recommendation and not a mandatory control.

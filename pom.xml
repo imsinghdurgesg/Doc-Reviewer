@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Root reactor. Architecture §6.
+
+  Every non-BOM version is pinned here and NEVER repeated in a child module (§6.1). Child modules
+  that re-declare a version drift silently: the reactor upgrade lands in one place and the stale
+  pin quietly wins in the other.
+
+  Versions below are not guesses. They are the set already proven to resolve and build in this
+  organization's other reactor — Boot 4.1.0 / Spring AI 2.0.0 / PDFBox 3.0.8 / POI 5.5.1 /
+  Tika 3.3.2 / Testcontainers 2.0.5. Two of those (Boot 4 and Testcontainers 2) have breaking
+  changes from their previous majors that cost real debugging time, recorded at each property.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.app.docreview</groupId>
+  <artifactId>document-standard-platform</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>Document-to-Standard Comparison Platform</name>
+
+  <!--
+    §6: the UI is deliberately OUTSIDE the reactor. It builds with npm and Webpack, so binding it
+    to Maven would couple the frontend release cycle to the backend for no benefit.
+  -->
+  <modules>
+    <module>platform-contracts</module>
+    <module>platform-test-support</module>
+    <module>services/review-core</module>
+    <module>services/document-processing</module>
+    <module>services/retrieval-comparison</module>
+    <module>system-tests</module>
+  </modules>
+
+  <properties>
+    <java.version>21</java.version>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Spring AI 2.x requires Java 21 and Jackson 3; both are satisfied by Boot 4.1. -->
+    <!--
+      BOM import rather than the starter-parent (§6.1 permits either). Consequence: plugin versions
+      and lombok.version are NOT inherited and must be pinned below, or Maven resolves whatever
+      plugin version it likes and the build stops being reproducible.
+    -->
+    <spring-boot.version>4.1.0</spring-boot.version>
+    <maven-compiler-plugin.version>3.14.0</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+
+    <spring-ai.version>2.0.0</spring-ai.version>
+    <springdoc.version>3.0.0</springdoc.version>
+
+    <!--
+      Resilience4j publishes a SEPARATE artifact for Boot 4 — resilience4j-spring-boot4. The
+      spring-boot3 artifact resolves but its autoconfiguration never activates, so annotations are
+      silently ignored: no error, no retries, no circuit breaker.
+    -->
+    <resilience4j.version>2.4.0</resilience4j.version>
+
+    <minio.version>8.5.17</minio.version>
+    <!--
+      GCS via the libraries BOM rather than a pinned artifact version. The Google client libraries
+      share transitive dependencies (gRPC, protobuf, auth) with each other AND with the Qdrant client
+      pinned below; the BOM is what keeps that set self-consistent. Pinning google-cloud-storage
+      alone resolves an auth/gRPC combination the BOM would have aligned, and the failure surfaces at
+      runtime as a NoSuchMethodError rather than at resolution.
+    -->
+    <google-cloud-bom.version>26.50.0</google-cloud-bom.version>
+    <qdrant-client.version>1.15.0</qdrant-client.version>
+    <!-- Versions the Qdrant 1.15.0 client resolves; pinned so a transitive bump cannot surprise us. -->
+    <grpc.version>1.80.0</grpc.version>
+    <protobuf.version>4.34.2</protobuf.version>
+    <tika.version>3.3.2</tika.version>
+    <pdfbox.version>3.0.8</pdfbox.version>
+    <poi.version>5.5.1</poi.version>
+    <!--
+      3.0.6, not 1.5.x. The 1.5.x line does not exist on Maven Central for this artifact — 1.5.10
+      resolved to nothing but left .lastUpdated failure markers in the local cache, which is why a
+      cached-looking version still failed the build. This version is the one already proven to
+      resolve and build in the organization's other reactor.
+    -->
+    <json-schema-validator.version>3.0.6</json-schema-validator.version>
+
+    <!--
+      Testcontainers 2.x RENAMED its artifacts: the module is `testcontainers-mongodb`, not
+      `mongodb`, and `testcontainers-junit-jupiter`, not `junit-jupiter`. The 1.x names resolve to
+      nothing and fail at dependency resolution rather than at compile time.
+    -->
+    <testcontainers.version>2.0.5</testcontainers.version>
+    <wiremock.version>3.13.1</wiremock.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-bom</artifactId>
+        <version>${spring-ai.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>io.minio</groupId>
+        <artifactId>minio</artifactId>
+        <version>${minio.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.google.cloud</groupId>
+        <artifactId>libraries-bom</artifactId>
+        <version>${google-cloud-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+
+      <dependency>
+        <groupId>io.qdrant</groupId>
+        <artifactId>client</artifactId>
+        <version>${qdrant-client.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.networknt</groupId>
+        <artifactId>json-schema-validator</artifactId>
+        <version>${json-schema-validator.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.springdoc</groupId>
+        <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        <version>${springdoc.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-spring-boot4</artifactId>
+        <version>${resilience4j.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.wiremock</groupId>
+        <artifactId>wiremock-standalone</artifactId>
+        <version>${wiremock.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.tika</groupId>
+        <artifactId>tika-core</artifactId>
+        <version>${tika.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.pdfbox</groupId>
+        <artifactId>pdfbox</artifactId>
+        <version>${pdfbox.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.poi</groupId>
+        <artifactId>poi-ooxml</artifactId>
+        <version>${poi.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!--
+      Lombok is provided-scope everywhere: it is a compile-time annotation processor and must not
+      appear on any runtime classpath. §25 restricts WHICH annotations are allowed — notably no
+      @Data on documents, domain aggregates, evidence payloads, or anything holding document text.
+    -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <version>${spring-boot.version}</version>
+          <executions>
+            <execution>
+              <!--
+                Boot 4 does NOT bind `repackage` by default. Without this every service builds a
+                thin jar and `java -jar` fails with "no main manifest attribute" — and because the
+                Dockerfiles copy target/*.jar, every container image breaks the same way. This cost
+                real time in the previous project; it is bound explicitly here.
+              -->
+              <id>repackage</id>
+              <goals><goal>repackage</goal></goals>
+            </execution>
+          </executions>
+          <configuration>
+            <excludes>
+              <exclude>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+              </exclude>
+            </excludes>
+          </configuration>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>${maven-compiler-plugin.version}</version>
+          <configuration>
+            <release>${maven.compiler.release}</release>
+            <annotationProcessorPaths>
+              <path>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+              </path>
+            </annotationProcessorPaths>
+            <compilerArgs>
+              <!-- Parameter names are needed for constructor injection without @Autowired. -->
+              <arg>-parameters</arg>
+            </compilerArgs>
+          </configuration>
+        </plugin>
+
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>${maven-surefire-plugin.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

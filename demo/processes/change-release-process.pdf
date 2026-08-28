@@ -1,0 +1,139 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 2 /Kids [4 0 R 6 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1652 >>
+stream
+BT
+/F1 11 Tf
+15.5 TL
+1 0 0 1 62 730 Tm
+(Production Change and Release Process) Tj
+T*
+() Tj
+T*
+(Document Owner: Engineering Operations) Tj
+T*
+(Last Reviewed: 2026-03-01) Tj
+T*
+(Applies To: All production services) Tj
+T*
+() Tj
+T*
+(1. Purpose) Tj
+T*
+() Tj
+T*
+(This process defines how engineering teams plan, approve, test, and deploy changes to) Tj
+T*
+(production services. It supports the Technology Change Management Standard.) Tj
+T*
+() Tj
+T*
+(2. Scope) Tj
+T*
+() Tj
+T*
+(Covers application releases, infrastructure changes, and configuration changes to any) Tj
+T*
+(production environment.) Tj
+T*
+() Tj
+T*
+(3. Change Approval) Tj
+T*
+() Tj
+T*
+(3.1 Every production change must be approved in the change record before it is deployed.) Tj
+T*
+(Deployment pipelines reject any change without a recorded approval.) Tj
+T*
+() Tj
+T*
+(3.2 The approver must be a different person from the engineer who implemented the change.) Tj
+T*
+(The pipeline blocks self-approval automatically.) Tj
+T*
+() Tj
+T*
+(3.3 The change record captures the approver name and the approval timestamp when approval is) Tj
+T*
+(granted.) Tj
+T*
+() Tj
+T*
+(4. Testing) Tj
+T*
+() Tj
+T*
+(4.1 Every change is deployed to the staging environment and verified there before a) Tj
+T*
+(production release is scheduled.) Tj
+T*
+() Tj
+T*
+(5. Rollback) Tj
+T*
+() Tj
+T*
+(5.1 Engineers discuss a rollback approach during the release readiness call.) Tj
+T*
+() Tj
+T*
+(6. Emergency Changes) Tj
+T*
+() Tj
+T*
+(6.1 Emergency changes may be deployed immediately without prior approval at the discretion) Tj
+T*
+(of the on-call engineer. No retrospective review is required.) Tj
+T*
+() Tj
+T*
+(7. Records) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 112 >>
+stream
+BT
+/F1 11 Tf
+15.5 TL
+1 0 0 1 62 730 Tm
+(7.1 Deployment records are retained in the pipeline audit log.) Tj
+T*
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000002021 00000 n 
+0000002147 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+2310
+%%EOF

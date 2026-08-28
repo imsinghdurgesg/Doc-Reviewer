@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared test fixtures and container factories. Architecture §8.
+
+  Consumed with test scope only. It must not contain production code, and no service may depend on
+  it at compile scope — that would put Testcontainers on a runtime classpath.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.app.docreview</groupId>
+    <artifactId>document-standard-platform</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>platform-test-support</artifactId>
+  <name>platform-test-support</name>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.app.docreview</groupId>
+      <artifactId>platform-contracts</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <!--
+      Testcontainers 2.x artifact names: `testcontainers-mongodb`, NOT `mongodb`. The 1.x name does
+      not exist in 2.x and fails at resolution.
+    -->
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-mongodb</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.wiremock</groupId>
+      <artifactId>wiremock-standalone</artifactId>
+    </dependency>
+  </dependencies>
+</project>

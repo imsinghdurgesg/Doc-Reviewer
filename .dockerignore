@@ -1,0 +1,36 @@
+# Keeps the build context small and the builds reproducible.
+#
+# Every service Dockerfile uses `context: .` (the repository root) because the Maven reactor needs the
+# root pom and the sibling modules a service depends on. That means `COPY . .` would otherwise drag
+# in ~845 MB of local build output — 556 MB of node_modules alone — on every image build.
+#
+# Correctness matters more than speed here: a HOST `target/` copied into the builder can shadow what
+# the in-image `mvn package` produces, so a stale local artifact silently becomes the shipped one.
+# Excluding it forces the image to build from source.
+
+# Local build output. Rebuilt inside the image.
+**/target/
+**/node_modules/
+ui/review-web/dist/
+
+# Secrets. Compose supplies environment at RUN time; the image must never contain the key.
+.env
+.env.backup-*
+
+# VCS and editor state
+.git/
+.gitignore
+.idea/
+.vscode/
+**/*.iml
+
+# OS metadata
+**/.DS_Store
+
+# Logs and scratch
+*.log
+
+# Docs and fixtures are not needed to compile a service. `demo/` is mounted or uploaded at runtime,
+# not baked in.
+demo/
+README.md

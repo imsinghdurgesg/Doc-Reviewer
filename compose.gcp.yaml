@@ -1,0 +1,122 @@
+# GCP deployment overlay. Architecture §27, §41.
+#
+# Layered over compose.yaml:  docker compose -f compose.yaml -f compose.gcp.yaml up -d
+#
+# FOUR differences from the local stack, each load-bearing:
+#
+# 1. Images come from Artifact Registry, not from source. compose.yaml carries `build:` for local
+#    development, and compose resolves a build context even when it is only pulling — so each service
+#    must pin `image:` AND `build: !reset null`. Without it the VM fails with
+#    "lstat /opt/docreview/services: no such file or directory", because only the compose files are
+#    deployed to the VM, never the source tree.
+#
+# 2. NO MinIO. Object storage is GCS, and the VM's attached service account supplies credentials — so
+#    there is no key file to mount and nothing to rotate. compose.gcs.yaml (the ADC mount) is NOT
+#    used here; that file exists only for local development.
+#
+# 3. Caddy terminates TLS. It obtains and renews a Let's Encrypt certificate automatically by proving
+#    control of the domain, which is why DNS must already point at this host before the first boot —
+#    otherwise the challenge fails and retries with backoff while the site is unreachable.
+#
+# 4. Nothing but Caddy publishes a host port. review-web moves to `expose`, so the only way in is
+#    through TLS on 443. §3 keeps every other service on the internal network.
+
+services:
+  # --- TLS terminator and the only public surface ---
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"     # ACME HTTP-01 challenge and the redirect to HTTPS
+      - "443:443"
+    environment:
+      # The hostname the certificate is issued for. Caddy fails the challenge if DNS does not
+      # resolve here, so this must match the A record.
+      DOMAIN: ${DOMAIN:?DOMAIN must be set, e.g. docreview.example.org}
+    volumes:
+      - ./infrastructure/gcp/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and ACME account keys. A named volume, so a container replacement does not
+      # re-request a certificate — Let's Encrypt rate-limits duplicate issuance.
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      review-web:
+        condition: service_started
+    networks: [docreview]
+    restart: unless-stopped
+
+  # --- Application services: registry images, no build context, no MinIO wiring ---
+  #
+  # `depends_on` MERGES across compose files rather than replacing, so the inherited minio-init entry
+  # survives unless reset BY NAME. minio-init is a no-op container here, and a
+  # `service_completed_successfully` wait on a container compose treats as failed blocks every
+  # service that waits on it.
+  review-web:
+    build: !reset null
+    image: ${DOCREVIEW_REPO}/review-web:${DOCREVIEW_IMAGE_TAG:-latest}
+    # No published port: Caddy proxies to it over the internal network.
+    ports: !reset []
+    expose: ["8080"]
+
+  review-core:
+    build: !reset null
+    image: ${DOCREVIEW_REPO}/review-core:${DOCREVIEW_IMAGE_TAG:-latest}
+    environment:
+      SECURITY_MODE: ${SECURITY_MODE:-sso}
+      STORAGE_PROVIDER: gcs
+      # UNSET, deliberately.
+      #
+      # compose.yaml points this at /gcp/application_default_credentials.json for local development,
+      # where compose.gcs.yaml mounts a key file there. On the VM that path does not exist — and a
+      # GOOGLE_APPLICATION_CREDENTIALS that is SET BUT UNRESOLVABLE makes the client give up rather
+      # than fall through, so every call ran as "Anonymous caller" and bucket sync failed with
+      # "Anonymous caller does not have storage.objects.list access".
+      #
+      # Blank restores the default ADC chain, whose next step is the metadata server — the VM's
+      # attached service account, which is the whole point of having no key file (§27, §30).
+      GOOGLE_APPLICATION_CREDENTIALS: ""
+      # A service name, not the public origin: this is how the workers reach review-core on the
+      # internal network (§20.3).
+      REVIEW_CORE_BASE_URL: http://review-core:8080
+    depends_on:
+      minio-init: !reset null
+    networks: [docreview]
+
+  document-processing:
+    build: !reset null
+    image: ${DOCREVIEW_REPO}/document-processing:${DOCREVIEW_IMAGE_TAG:-latest}
+    environment:
+      STORAGE_PROVIDER: gcs
+      # See review-core: an unresolvable credentials path defeats the metadata-server fallback.
+      GOOGLE_APPLICATION_CREDENTIALS: ""
+    depends_on:
+      minio-init: !reset null
+
+  retrieval-comparison:
+    build: !reset null
+    image: ${DOCREVIEW_REPO}/retrieval-comparison:${DOCREVIEW_IMAGE_TAG:-latest}
+    depends_on:
+      minio-init: !reset null
+
+  # --- MinIO is not deployed ---
+  #
+  # Compose cannot delete a service inherited from a base file, so both are reduced to a no-op image
+  # AND stripped of their wiring. The image alone is not enough: minio-init waits on
+  # `minio: service_healthy`, and a container that exits 0 immediately can never report healthy, so
+  # compose refused the whole stack with
+  # "dependency failed to start: container docreview-minio-1 exited (0)".
+  minio:
+    image: busybox:1.36
+    entrypoint: ["true"]
+    restart: "no"
+    healthcheck: !reset null
+    ports: !reset []
+
+  minio-init:
+    image: busybox:1.36
+    entrypoint: ["true"]
+    restart: "no"
+    depends_on: !reset null
+
+volumes:
+  caddydata:
+  caddyconfig:

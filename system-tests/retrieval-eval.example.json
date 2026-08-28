@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "Labelled set for the retrieval evaluation. Copy to retrieval-eval.json and fill in.",
+    "",
+    "documentVersionId    a process document already uploaded and parsed in the target deployment",
+    "description          free text, so a failing case is identifiable without opening this file",
+    "expectedStandardKeys the standards a knowledgeable reviewer says apply. Order is IGNORED --",
+    "                     ranking is measured by position in the RESULT, not here.",
+    "expectedDepartment   for the wrong-department rate. Omit or null when the corpus has none.",
+    "expectedStandardVersionIds",
+    "                     OPTIONAL. The specific version of each expected standard that should be",
+    "                     selected -- normally the one in force. Drives wrongVersionRate.",
+    "",
+    "                     Omit it when you are confident about the standard but not the version: the",
+    "                     metric SKIPS unlabelled cases rather than guessing, and reports n/a. That is",
+    "                     deliberate -- inventing a stricter expectation would either flatter or",
+    "                     unfairly penalise the system.",
+    "",
+    "                     Worth labelling wherever a standard has several versions. Selecting the",
+    "                     right standard at the wrong version is the failure a reviewer is LEAST",
+    "                     likely to catch: the subject matter matches, every finding reads plausibly,",
+    "                     and the document has been measured against rules that are not in force.",
+    "",
+    "An EMPTY expectedStandardKeys asserts that nothing should be retrieved. Include several of",
+    "these: a system that always returns its best guess scores well on recall while being unable to",
+    "say 'no standard here applies', and comparing against an unrelated policy reports every",
+    "requirement as a gap. Without negative cases that failure is invisible.",
+    "",
+    "supersededCandidateRate needs NO labelling -- it reads the lifecycle already on each candidate,",
+    "so it reports meaningfully even before this set is complete.",
+    "",
+    "Aim for a mix: single-standard, multi-standard, cross-department, multi-version, and not-covered."
+  ],
+  "cases": [
+    {
+      "documentVersionId": "PROC-REPLACE-ME-1",
+      "description": "Hardware procurement procedure, Procurement dept \u2014 expects two standards",
+      "expectedStandardKeys": [
+        "hardware-procurement",
+        "third-party-risk-management"
+      ],
+      "expectedDepartment": "PROCUREMENT",
+      "expectedStandardVersionIds": []
+    },
+    {
+      "documentVersionId": "PROC-REPLACE-ME-2",
+      "description": "Change management procedure \u2014 single obvious standard",
+      "expectedStandardKeys": [
+        "technology-change-management"
+      ],
+      "expectedDepartment": "IT",
+      "expectedStandardVersionIds": []
+    },
+    {
+      "documentVersionId": "PROC-REPLACE-ME-3",
+      "description": "Staff expense claim form \u2014 corpus has no governing standard",
+      "expectedStandardKeys": [],
+      "expectedDepartment": "FINANCE",
+      "expectedStandardVersionIds": []
+    }
+  ]
+}

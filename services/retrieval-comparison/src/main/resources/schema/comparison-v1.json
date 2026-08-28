@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "COMPARE-SCHEMA-V1",
+  "description": "Protected comparison response schema. Architecture 16.4. Validated in Java after the provider's structured-output pass, because provider structured output is best effort and this contract is not.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requirementId", "status", "reason", "confidence"],
+  "properties": {
+    "requirementId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Echoed back so a provider mix-up or a successful injection is detectable."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ALIGNED", "PARTIAL", "MISSING", "CONTRADICTED", "INSUFFICIENT_EVIDENCE"]
+    },
+    "gapType": {
+      "type": ["string", "null"],
+      "enum": ["WEAKER", "INCOMPLETE", "CONDITIONAL_ONLY", "TIMING_MISMATCH", "RESPONSIBILITY_MISMATCH", "EVIDENCE_NOT_DOCUMENTED", "SCOPE_MISMATCH", null],
+      "description": "PARTIAL only. Elsewhere it misleads a reviewer into reading a MISSING requirement as merely weaker."
+    },
+    "satisfiedClauseIds": { "type": "array", "items": { "type": "string" } },
+    "unsatisfiedClauseIds": { "type": "array", "items": { "type": "string" } },
+    "standardSpanIds": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Span IDs only. Never a quotation: a quoted string must be re-located in the document, and that is where fabricated evidence enters."
+    },
+    "processSpanIds": { "type": "array", "items": { "type": "string" } },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "recommendedAction": { "type": ["string", "null"], "maxLength": 2000 },
+    "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+    "needsHumanReview": { "type": "boolean" }
+  }
+}

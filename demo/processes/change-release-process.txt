@@ -1,0 +1,44 @@
+Production Change and Release Process
+
+Document Owner: Engineering Operations
+Last Reviewed: 2026-03-01
+Applies To: All production services
+
+1. Purpose
+
+This process defines how engineering teams plan, approve, test, and deploy changes to
+production services. It supports the Technology Change Management Standard.
+
+2. Scope
+
+Covers application releases, infrastructure changes, and configuration changes to any
+production environment.
+
+3. Change Approval
+
+3.1 Every production change must be approved in the change record before it is deployed.
+Deployment pipelines reject any change without a recorded approval.
+
+3.2 The approver must be a different person from the engineer who implemented the change.
+The pipeline blocks self-approval automatically.
+
+3.3 The change record captures the approver name and the approval timestamp when approval is
+granted.
+
+4. Testing
+
+4.1 Every change is deployed to the staging environment and verified there before a
+production release is scheduled.
+
+5. Rollback
+
+5.1 Engineers discuss a rollback approach during the release readiness call.
+
+6. Emergency Changes
+
+6.1 Emergency changes may be deployed immediately without prior approval at the discretion
+of the on-call engineer. No retrospective review is required.
+
+7. Records
+
+7.1 Deployment records are retained in the pipeline audit log.

@@ -1,0 +1,27 @@
+# Local GCS credentials overlay. Architecture §41.
+#
+# OPT-IN, and separate from compose.yaml for a concrete reason: bind-mounting a file that does not
+# exist makes Docker create a DIRECTORY at that path. ADC would then find a directory where it
+# expects a JSON file and fail with "Your default credentials were not found" — while
+# `gcloud auth application-default login` afterwards writes the real file somewhere the container
+# cannot see. Keeping the mount out of the default stack means a developer who has never run gcloud
+# is unaffected.
+#
+# Usage, after `gcloud auth application-default login`:
+#
+#   docker compose -f compose.yaml -f compose.gcs.yaml up -d review-core
+#
+# In deployment this file is NOT used: workload identity or an attached service account supplies
+# credentials with no file to mount.
+
+services:
+  review-core:
+    volumes:
+      # Read-only: the container never needs to refresh or rewrite these.
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/application_default_credentials.json:ro
+
+  # The parsing worker needs the same credentials: it READS BACK every object review-core writes.
+  # Omitting it here is what made every parse fail with NoSuchKey while the upload itself succeeded.
+  document-processing:
+    volumes:
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/application_default_credentials.json:ro

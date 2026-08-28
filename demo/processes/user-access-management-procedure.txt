@@ -1,0 +1,53 @@
+User Access Management Procedure
+
+Document Owner: Platform Operations
+Last Reviewed: 2026-02-10
+Applies To: Production systems operated by Platform Operations
+
+1. Purpose
+
+This procedure describes how the Platform Operations team requests, grants, reviews, and
+removes access to the production environment.
+
+2. Scope
+
+Covers all production systems managed by Platform Operations, including application
+servers, databases, and the container platform.
+
+3. Requesting Access
+
+3.1 Access requests are raised in the service desk tool. The data owner approves each access
+request before the account is created.
+
+3.2 Permissions are granted according to the requester's job role. Each role grants only the
+permissions that role requires to carry out its duties.
+
+3.3 A shared ops-admin account is used by the on-call team for administrative tasks on
+production servers. The account credentials are stored in the team password vault.
+
+8. Authentication
+
+8.1 Multi-factor authentication is enforced for VPN access to the corporate network.
+
+8.2 Passwords must be at least eight characters in length.
+
+8.3 Credentials are never written into configuration files or source control. Secrets are
+held in the platform secret store.
+
+5. Access Review
+
+5.1 The team lead reviews production access annually as part of the yearly compliance
+exercise.
+
+5.2 Review outcomes are noted in the compliance ticket.
+
+6. Privileged Operations
+
+6.1 Elevation to administrative rights follows the rules defined in SOP SEC-091.
+
+6.2 Administrative sessions on production hosts are logged by the bastion service.
+
+7. Onboarding
+
+7.1 New joiners are granted access once their manager confirms their start date and the data
+owner approves the request.

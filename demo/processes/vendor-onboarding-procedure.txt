@@ -1,0 +1,34 @@
+Vendor Onboarding and Oversight Procedure
+
+Document Owner: Procurement Operations
+Last Reviewed: 2026-03-10
+Applies To: All third-party service providers
+
+1. Purpose
+
+This procedure describes how Procurement Operations engages, assesses, and monitors
+third-party vendors providing services to the organization.
+
+2. Scope
+
+Applies to all vendors engaged under a written contract, including software suppliers,
+managed service providers, and professional services firms.
+
+3. Pre-Contract Assessment
+
+3.1 A security assessment is completed by the Information Security team before any vendor
+contract is signed. The assessment outcome is recorded in the vendor register.
+
+3.2 A financial stability review is performed by Finance before contract signature for
+vendors with an annual spend above the materiality threshold.
+
+3.3 Customer references are requested where the vendor is new to the organization.
+
+4. Ongoing Monitoring
+
+4.1 Vendor performance is reviewed by the contract owner every two years at contract renewal.
+
+5. Offboarding
+
+5.1 On contract termination, vendor access to organizational systems is revoked and the
+vendor is removed from the vendor register.
