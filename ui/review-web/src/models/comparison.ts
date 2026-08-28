@@ -633,6 +633,18 @@ export const TERMINAL_COMPARISON_STATES: readonly string[] = [
  * working. §18.4 requires a genuinely partial review to say so — and equally requires that a review
  * in progress is not mistaken for one.
  */
+/**
+ * Whether the comparison is still running.
+ *
+ * One named concept rather than an inline `!TERMINAL.includes(...)` at each call site: several places
+ * must suppress "this is missing" messaging while a run is in flight, and they have to agree. The
+ * coverage panel reported a missing ledger as a defect mid-run — the ledger is written when the run
+ * finishes, so it was correctly absent and the panel told the reviewer their review was broken.
+ */
+export function isComparisonRunning(detail: { status: string }): boolean {
+  return !TERMINAL_COMPARISON_STATES.includes(detail.status);
+}
+
 export function isIncompleteReview(detail: {
   status: string;
   evaluatedRequirements?: number | null;

@@ -74,6 +74,21 @@ public class ComparisonController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(toDetail(comparison));
     }
 
+    /**
+     * Runs the same review again, as a new comparison. Architecture §19.2.
+     *
+     * <p>POST, and 202: it creates a resource and queues work. The response is the NEW comparison, so
+     * the client can navigate straight to it rather than guessing its id.
+     *
+     * <p>The original is untouched — §19.2 makes a completed review immutable, and a failed one is
+     * still the record of what was attempted. Nothing about this endpoint edits it.
+     */
+    @PostMapping("/{publicId}/rerun")
+    public ResponseEntity<ComparisonDetailResponse> rerun(@PathVariable String publicId) {
+        var rerun = comparisonService.rerun(publicId, currentUser.id(), visibilityScope());
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(toDetail(rerun));
+    }
+
     @GetMapping("/{publicId}")
     public ComparisonDetailResponse get(@PathVariable String publicId) {
         return toDetail(comparisonService.getVisibleTo(publicId, visibilityScope()));

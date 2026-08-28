@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import { overlineLabel, palette } from "@/app/theme";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import { isIncompleteReview } from "@/models/comparison";
+import { isComparisonRunning, isIncompleteReview } from "@/models/comparison";
 import { AssessmentFocus } from "./AssessmentFocus";
 import { CoveragePanel } from "@/features/comparisons/CoveragePanel";
 import type { ComparisonDetail, ComparisonStatus, Finding } from "@/models/comparison";
@@ -214,7 +214,13 @@ export function ComparisonSummaryBar({ detail, findings }: ComparisonSummaryBarP
           different when three requirements were never evaluated at all. §17.6 requires the untested
           ones to be visible rather than absorbed into the finding totals. */}
       <Box sx={{ mt: 2 }}>
-        <CoveragePanel coverage={detail.coverage} exempt={detail.coverageExempt} />
+        {/* inProgress from the SAME terminal-state list the polling logic uses, so the panel and the
+            poller cannot disagree about whether a review has finished. */}
+        <CoveragePanel
+          coverage={detail.coverage}
+          exempt={detail.coverageExempt}
+          inProgress={isComparisonRunning(detail)}
+        />
       </Box>
     </Box>
   );

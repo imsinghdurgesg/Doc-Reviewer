@@ -106,6 +106,43 @@ public class ComparisonService {
         return comparison;
     }
 
+    /**
+     * Runs the same review again as a NEW comparison. Architecture §19.2.
+     *
+     * <p><strong>A new record, never a mutation.</strong> §19.2 makes a completed comparison immutable,
+     * so this creates a fresh one from the same document, standards and guidance. The original keeps
+     * its findings, its state and its provenance — a reviewer can still see what the earlier attempt
+     * produced and why it failed, which is the point of recording a failure rather than discarding it.
+     *
+     * <p>The rerun therefore uses CURRENT versions throughout: today's requirement sets, governance
+     * overrides, prompts and models. It is a new assessment that happens to have the same inputs, not
+     * a replay of the old one — and its own provenance records exactly that.
+     *
+     * <p>Reruns any state, not only FAILED. A COMPLETED review is worth repeating after a standard is
+     * re-extracted or an override is confirmed, and refusing that would send the reviewer back to the
+     * upload screen to reconstruct a selection they already made.
+     */
+    public Comparison rerun(String publicId, String actor, String ownerOrNull) {
+        // SCOPED read (§33). `get` bypasses ownership, so rerunning through it would let a caller
+        // clone a comparison they cannot even open — and the new record would name their own document.
+        var original = getVisibleTo(publicId, ownerOrNull);
+
+        // Re-validated, deliberately. A standard comparable when the original ran may since have been
+        // archived, or its requirement count may now exceed the per-comparison limit — so this goes
+        // through create() rather than dispatching directly, and fails with the same explicit reasons.
+        var rerun = create(
+                original.getDocumentVersionId(),
+                original.getStandardVersionIds(),
+                original.getComparisonGuidance(),
+                actor);
+
+        log.info("Comparison {} rerun as {} ({} standard(s))",
+                publicId, rerun.getPublicId(),
+                original.getStandardVersionIds() == null
+                        ? 0 : original.getStandardVersionIds().size());
+        return rerun;
+    }
+
     public Comparison get(String publicId) {
         return comparisons.findByPublicId(publicId)
                 .orElseThrow(() -> ApiException.notFound("Comparison"));

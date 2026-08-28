@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
   AlertTitle,
   Box,
+  Button,
   CircularProgress,
   LinearProgress,
   Stack,
@@ -65,6 +66,9 @@ export function ComparisonWorkspace() {
   const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null);
   const [activeReferenceIndex, setActiveReferenceIndex] = useState(0);
 
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
   const [mobilePane, setMobilePane] = useState<MobilePane>("process");
   const shell = useViewerShell();
 
@@ -79,6 +83,23 @@ export function ComparisonWorkspace() {
       query.state.data && TERMINAL_COMPARISON_STATES.includes(query.state.data.status)
         ? false
         : 2500,
+  });
+
+  /**
+   * Runs the same review again.
+   *
+   * Navigates to the NEW comparison rather than refreshing this one: the original is immutable
+   * (§19.2) and keeps its own findings and failure reason, so staying here would show the old result
+   * while the new run proceeded invisibly elsewhere.
+   */
+  const rerun = useMutation({
+    mutationFn: () =>
+      apiClient.post<ComparisonDetail>(`/comparisons/${comparisonId}/rerun`),
+    onSuccess: (created) => {
+      // History gains a row; invalidate so it appears without a manual refresh.
+      void queryClient.invalidateQueries({ queryKey: ["comparisons"] });
+      navigate(`/comparisons/${created.publicId}`);
+    },
   });
 
   const evidence = useQuery({
@@ -276,7 +297,23 @@ export function ComparisonWorkspace() {
 
       {detail.status === "FAILED" && (
         <Box sx={{ px: 2, py: 1 }}>
-          <Alert severity="error">
+          {/* The message alone was a dead end: it says to rerun, and there was no way to. Reaching the
+              upload screen and reconstructing the same standard selection from memory is not a remedy.
+              The action runs the same document and standards again as a NEW comparison — this one keeps
+              its findings and its failure reason (§19.2). */}
+          <Alert
+            severity="error"
+            action={
+              <Button
+                size="small"
+                color="inherit"
+                disabled={rerun.isPending}
+                onClick={() => rerun.mutate()}
+              >
+                {rerun.isPending ? "Starting…" : "Rerun"}
+              </Button>
+            }
+          >
             {detail.stateMessage ?? "This comparison could not be completed."}
           </Alert>
         </Box>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Alert, Box, Chip, Collapse, Divider, Stack, Typography,
+  Alert, Box, Chip, CircularProgress, Collapse, Divider, Stack, Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import {
@@ -133,17 +133,39 @@ function EntryRow({ entry }: { entry: CoverageEntry }) {
   );
 }
 
-export function CoveragePanel({ coverage, exempt }: {
+export function CoveragePanel({ coverage, exempt, inProgress }: {
   coverage: CoverageSummary | null | undefined;
   /** True when this comparison predates coverage tracking. Server-stated, never inferred. */
   exempt?: boolean | undefined;
+  /** True while the comparison is still running, so absent coverage is expected rather than wrong. */
+  inProgress?: boolean | undefined;
 }) {
-  // TWO DISTINCT ABSENCES, and conflating them is the thing to avoid.
+  // THREE DISTINCT ABSENCES, and conflating any two of them misinforms the reviewer.
   //
-  // Absent is never "zero gaps" — rendering a missing ledger as a clean summary would assert coverage
-  // nobody measured. But "this review predates coverage tracking" and "this review should have
-  // coverage and does not" are also different facts, and only the first is reassuring.
+  // Absent is never "zero gaps": rendering a missing ledger as a clean summary would assert coverage
+  // nobody measured. But the reasons a ledger is missing are not interchangeable —
+  //
+  //   in progress  the ledger is written when the run finishes, so there is nothing to show YET
+  //   exempt       the review predates coverage tracking, so there never will be
+  //   neither      the review should have coverage and does not, which IS a defect
+  //
+  // Only the last is alarming. Treating an in-flight comparison as the last one told a reviewer their
+  // running review was broken — the same mistake `unevaluatedRequirements` already guards against,
+  // where "36 of 52 could not be evaluated" mid-run reads as failure rather than progress.
   if (!coverage) {
+    if (inProgress) {
+      return (
+        <Box sx={{ border: `1px solid ${palette.border}`, borderRadius: 1, p: 2 }}>
+          <Typography sx={overlineLabel}>Requirement coverage</Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 1 }}>
+            <CircularProgress size={14} />
+            <Typography sx={{ fontSize: 12.5, color: "#5c6a63" }}>
+              Recorded when the review finishes.
+            </Typography>
+          </Stack>
+        </Box>
+      );
+    }
     return (
       <Box sx={{ border: `1px solid ${palette.border}`, borderRadius: 1, p: 2 }}>
         <Typography sx={overlineLabel}>Requirement coverage</Typography>
