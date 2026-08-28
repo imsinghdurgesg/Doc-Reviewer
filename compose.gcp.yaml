@@ -4,11 +4,25 @@
 #
 # FOUR differences from the local stack, each load-bearing:
 #
-# 1. Images come from Artifact Registry, not from source. compose.yaml carries `build:` for local
-#    development, and compose resolves a build context even when it is only pulling — so each service
-#    must pin `image:` AND `build: !reset null`. Without it the VM fails with
-#    "lstat /opt/docreview/services: no such file or directory", because only the compose files are
-#    deployed to the VM, never the source tree.
+# 1. Images come from Artifact Registry, not from source, and are pinned BY DIGEST.
+#
+#    compose.yaml carries `build:` for local development, and compose resolves a build context even
+#    when it is only pulling — so each service must pin `image:` AND `build: !reset null`. Without it
+#    the VM fails with "lstat /opt/docreview/services: no such file or directory", because only the
+#    compose files are deployed to the VM, never the source tree.
+#
+#    DIGESTS, NOT TAGS. A tag is a mutable pointer: re-pushing moves it, so a VM that reboots weeks
+#    later can pull different bytes than the ones that were tested, and "which build produced this
+#    finding" becomes unanswerable (§19.2). A digest names the image content itself.
+#
+#    The `:?` syntax makes each digest REQUIRED. The previous form defaulted to `:-latest`, so an
+#    unset variable silently deployed whatever `latest` pointed at — the exact failure mode digest
+#    pinning exists to prevent, and it would have looked like a successful deploy. Now compose
+#    refuses to start and names the missing variable.
+#
+#    Source them from the release manifest rather than typing them:
+#        set -a; . releases/v1.0.0-pilot.1/image-digests.env; set +a
+#        docker compose -f compose.yaml -f compose.gcp.yaml up -d
 #
 # 2. NO MinIO. Object storage is GCS, and the VM's attached service account supplies credentials — so
 #    there is no key file to mount and nothing to rotate. compose.gcs.yaml (the ADC mount) is NOT
@@ -52,14 +66,14 @@ services:
   # service that waits on it.
   review-web:
     build: !reset null
-    image: ${DOCREVIEW_REPO}/review-web:${DOCREVIEW_IMAGE_TAG:-latest}
+    image: ${DOCREVIEW_REPO}/review-web@${DOCREVIEW_REVIEW_WEB_DIGEST:?set a digest — see releases/}
     # No published port: Caddy proxies to it over the internal network.
     ports: !reset []
     expose: ["8080"]
 
   review-core:
     build: !reset null
-    image: ${DOCREVIEW_REPO}/review-core:${DOCREVIEW_IMAGE_TAG:-latest}
+    image: ${DOCREVIEW_REPO}/review-core@${DOCREVIEW_REVIEW_CORE_DIGEST:?set a digest — see releases/}
     environment:
       SECURITY_MODE: ${SECURITY_MODE:-sso}
       STORAGE_PROVIDER: gcs
@@ -83,7 +97,7 @@ services:
 
   document-processing:
     build: !reset null
-    image: ${DOCREVIEW_REPO}/document-processing:${DOCREVIEW_IMAGE_TAG:-latest}
+    image: ${DOCREVIEW_REPO}/document-processing@${DOCREVIEW_DOCUMENT_PROCESSING_DIGEST:?set a digest — see releases/}
     environment:
       STORAGE_PROVIDER: gcs
       # See review-core: an unresolvable credentials path defeats the metadata-server fallback.
@@ -93,7 +107,7 @@ services:
 
   retrieval-comparison:
     build: !reset null
-    image: ${DOCREVIEW_REPO}/retrieval-comparison:${DOCREVIEW_IMAGE_TAG:-latest}
+    image: ${DOCREVIEW_REPO}/retrieval-comparison@${DOCREVIEW_RETRIEVAL_COMPARISON_DIGEST:?set a digest — see releases/}
     depends_on:
       minio-init: !reset null
 

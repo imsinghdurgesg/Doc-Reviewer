@@ -174,6 +174,34 @@ else
   exit 1
 fi
 
+# ---------------------------------------------------------------- Image digests
+#
+# compose.gcp.yaml pins every service BY DIGEST and marks each variable required, so the stack cannot
+# start without them. The digests are produced at push time and travel in the compose bundle, because
+# only the registry can supply them — a tag would let a reboot weeks later pull different bytes than
+# were tested (§19.2).
+#
+# Appended to the env file compose already reads, rather than exported: `docker compose --env-file`
+# ignores the surrounding shell environment for variable substitution.
+DIGEST_MANIFEST="$APP_DIR/releases/$IMAGE_TAG/image-digests.env"
+if [ ! -f "$DIGEST_MANIFEST" ]; then
+  # Fall back to any manifest in the bundle. The tag directory is the convention, but a bundle built
+  # with an explicit RELEASE_DIR would land elsewhere, and failing on a naming mismatch when the
+  # digests are present would be needlessly brittle.
+  DIGEST_MANIFEST="$(find "$APP_DIR/releases" -name image-digests.env -type f 2>/dev/null | head -1)"
+fi
+if [ -n "$DIGEST_MANIFEST" ] && [ -f "$DIGEST_MANIFEST" ]; then
+  log "applying image digests from ${DIGEST_MANIFEST#$APP_DIR/}"
+  # Comments and blanks stripped; the file is generated, so no quoting or escaping to handle.
+  grep -E '^DOCREVIEW_[A-Z_]+_DIGEST=' "$DIGEST_MANIFEST" >> "$ENV_FILE"
+  grep -cE '^DOCREVIEW_[A-Z_]+_DIGEST=' "$DIGEST_MANIFEST" | xargs -I{} log "  {} digests pinned"
+else
+  log "FATAL: no image-digests.env in the compose bundle."
+  log "  compose.gcp.yaml requires a digest per service and will refuse to start without one."
+  log "  Re-run ./infrastructure/gcp/deploy.sh, which generates and uploads it."
+  exit 1
+fi
+
 # ---------------------------------------------------------------- Start
 cd "$APP_DIR"
 log "authenticating docker to artifact registry"
