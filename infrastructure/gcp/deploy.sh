@@ -10,6 +10,9 @@ set -euo pipefail
 
 PROJECT="${PROJECT:-uit-uit-et-servicenow-ai-dev}"
 REGION="${REGION:-us-central1}"
+# The instance this release targets. Named here rather than inline so the bucket lookup, the boot
+# script push, and the printed roll-forward commands cannot disagree about which VM they mean.
+VM_NAME="${VM_NAME:-docreview-vm}"
 REPO="${REGION}-docker.pkg.dev/${PROJECT}/docreview"
 # Immutable by default. A moving `latest` makes "which build is running" unanswerable after the
 # fact, which matters for a tool whose results have to be explainable weeks later (§19.2).
@@ -109,20 +112,62 @@ done
 # The topology travels with the images. Uploaded here rather than baked into an image so a compose
 # change does not require a rebuild. The digest manifest goes with it, because the overlay refuses to
 # start without it.
-if [ -n "${GCS_BUCKET:-}" ]; then
-  log "uploading the compose bundle to gs://$GCS_BUCKET/deploy/"
-  BUNDLE=$(mktemp -t docreview-compose-XXXX).tgz
-  tar czf "$BUNDLE" compose.yaml compose.gcp.yaml infrastructure/gcp/Caddyfile "$MANIFEST"
-  gcloud storage cp "$BUNDLE" "gs://$GCS_BUCKET/deploy/docreview-compose.tgz" --project="$PROJECT"
-  rm -f "$BUNDLE"
-else
-  log "GCS_BUCKET unset; skipping the compose bundle upload."
-  log "  The VM reads it from gs://<bucket>/deploy/docreview-compose.tgz at boot."
+# GCS_BUCKET falls back to the VM's OWN metadata rather than being required here.
+#
+# It used to be read only from the environment, and an unset value skipped the upload with one log
+# line and exit 0 — a successful-looking release the VM could not start, because compose.gcp.yaml
+# requires a digest per service and the digests travel in this bundle. The bucket is not really an
+# operator's choice; it is a property of the deployment, so it is read from the deployment.
+if [ -z "${GCS_BUCKET:-}" ]; then
+  GCS_BUCKET=$(gcloud compute instances describe "$VM_NAME" --zone="${REGION}-a" \
+    --project="$PROJECT" \
+    --format='value(metadata.items.filter("key:gcs-bucket").extract("value"))' 2>/dev/null \
+    | tr -d "[]'" || true)
+  [ -n "$GCS_BUCKET" ] && log "GCS_BUCKET unset; using the VM's own gcs-bucket metadata: $GCS_BUCKET"
 fi
+
+if [ -z "$GCS_BUCKET" ]; then
+  log "FATAL: no GCS bucket. The compose bundle carries $MANIFEST, and the VM cannot start"
+  log "  without it. Set GCS_BUCKET, or set 'gcs-bucket' in the instance metadata."
+  exit 1
+fi
+
+log "uploading the compose bundle to gs://$GCS_BUCKET/deploy/"
+BUNDLE=$(mktemp -t docreview-compose-XXXX).tgz
+tar czf "$BUNDLE" compose.yaml compose.gcp.yaml infrastructure/gcp/Caddyfile "$MANIFEST"
+gcloud storage cp "$BUNDLE" "gs://$GCS_BUCKET/deploy/docreview-compose.tgz" --project="$PROJECT"
+rm -f "$BUNDLE"
+
+# THE BOOT SCRIPT TRAVELS WITH THE RELEASE.
+#
+# startup.sh lives in VM instance metadata, not on the VM's disk, and nothing used to push it. So the
+# repository copy and the script that actually runs drifted silently — and a release that depended on
+# a newer startup.sh failed at boot with every service unable to resolve its image, because the VM was
+# running a version from before digest pinning existed. A script in the repository is not the script
+# that runs unless something puts it there.
+#
+# Pushed on every deploy, so the two cannot diverge again.
+log "updating the VM boot script from infrastructure/gcp/startup.sh"
+gcloud compute instances add-metadata "$VM_NAME" --zone="${REGION}-a" --project="$PROJECT" \
+  --metadata-from-file startup-script=infrastructure/gcp/startup.sh >/dev/null
+
+# Verified by reading it back. add-metadata reports success on a value that was truncated or
+# rewritten, and the failure would surface as a boot error naming compose rather than the upload.
+pushed_size=$(gcloud compute instances describe "$VM_NAME" --zone="${REGION}-a" --project="$PROJECT" \
+  --format='value(metadata.items.filter("key:startup-script").extract("value"))' 2>/dev/null | wc -c)
+local_size=$(wc -c < infrastructure/gcp/startup.sh)
+# Compared loosely: the metadata round trip normalises trailing whitespace, so an exact byte match
+# would fail on a correct push. A large discrepancy means truncation, which is what matters.
+if [ "$pushed_size" -lt $((local_size - 200)) ]; then
+  log "FATAL: the boot script in metadata is $pushed_size bytes but the local file is $local_size."
+  log "  It appears truncated; the VM would boot an incomplete script."
+  exit 1
+fi
+log "  boot script in metadata: $pushed_size bytes"
 
 log "pushed tag $TAG; digests recorded in $MANIFEST"
 log "to roll the VM onto it:"
-log "  gcloud compute instances add-metadata docreview-vm --zone=${REGION}-a \\"
+log "  gcloud compute instances add-metadata $VM_NAME --zone=${REGION}-a \\"
 log "    --metadata image-tag=$TAG --project=$PROJECT"
-log "  gcloud compute ssh docreview-vm --zone=${REGION}-a --project=$PROJECT \\"
+log "  gcloud compute ssh $VM_NAME --zone=${REGION}-a --project=$PROJECT --tunnel-through-iap \\"
 log "    --command 'sudo google_metadata_script_runner startup'"
