@@ -1,4 +1,4 @@
-# v1.0.0-pilot.2 — pre-deploy baseline (GCP)
+# v1.0.0-pilot.3 — pre-deploy baseline (GCP)
 
 Captured before the code-only deploy. This is the ROLLBACK TARGET and the reference for the
 post-deploy checks: any count below that changes without an explicit user action is a rollback trigger.

@@ -1,4 +1,4 @@
-# v1.0.0-pilot.2 — post-deploy verification
+# v1.0.0-pilot.3 — post-deploy verification
 
 Run in order. **Check 1 is the highest priority**: it is the failure this release exists to prevent,
 and it affects every historical comparison rather than only new ones.

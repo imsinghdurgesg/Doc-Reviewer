@@ -1,7 +1,13 @@
-# v1.0.0-pilot.2 — configuration manifest
+# v1.0.0-pilot.3 — configuration manifest
 
 A **patch on `v1.0.0-pilot.1`**, which is unchanged and still a valid frozen build. This release
 withdraws a defect introduced after that tag and adds the mechanism that replaces it.
+
+**Supersedes `v1.0.0-pilot.2`, which was never deployed.** That tag holds the same code fix but
+omitted two things: the regression test for the fix, and the Maven download retry without which the
+images could not be built at all — two release attempts were lost to dropped connections to Maven
+Central. Rather than move a pushed tag, `pilot.2` is left frozen and unused. The deployed tag names
+exactly the tree that was tested and built.
 
 Feature settings, extraction state, and governance posture are **identical to `pilot.1`** unless
 listed below.
