@@ -199,7 +199,12 @@ if [ -n "$DIGEST_MANIFEST" ] && [ -f "$DIGEST_MANIFEST" ]; then
   log "applying image digests from ${DIGEST_MANIFEST#$APP_DIR/}"
   # Comments and blanks stripped; the file is generated, so no quoting or escaping to handle.
   grep -E '^DOCREVIEW_[A-Z_]+_DIGEST=' "$DIGEST_MANIFEST" >> "$ENV_FILE"
-  grep -cE '^DOCREVIEW_[A-Z_]+_DIGEST=' "$DIGEST_MANIFEST" | xargs -I{} log "  {} digests pinned"
+  # Counted into a variable rather than piped through xargs: `log` is a shell function, and xargs can
+  # only exec a binary, so `| xargs -I{} log ...` died with "xargs: log: No such file or directory"
+  # and `set -e` aborted the boot AFTER the digests had been written. The stack was left down with an
+  # error naming xargs, which says nothing about the deploy.
+  pinned=$(grep -cE '^DOCREVIEW_[A-Z_]+_DIGEST=' "$DIGEST_MANIFEST")
+  log "  $pinned digests pinned"
 else
   log "FATAL: no image-digests.env in the compose bundle."
   log "  compose.gcp.yaml requires a digest per service and will refuse to start without one."
