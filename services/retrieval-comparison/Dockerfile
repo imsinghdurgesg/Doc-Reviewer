@@ -6,7 +6,12 @@ FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY . .
 
-RUN ./mvnw -pl services/retrieval-comparison -am clean package -DskipTests
+# Retried on a TRANSIENT dependency-download failure, not on a build failure. This build pulls a
+# few hundred artifacts, and a dropped connection to Maven Central failed the whole image — which
+# in a four-image release means no digests are written and nothing can be deployed at all. The
+# script classifies the failure and re-runs only a transfer problem; a compile or test failure
+# exits immediately, because repeating it would bury the real error.
+RUN ./infrastructure/build/mvn-package-retry.sh services/retrieval-comparison -DskipTests
 
 FROM eclipse-temurin:21-jre
 

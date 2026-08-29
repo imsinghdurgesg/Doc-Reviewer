@@ -10,7 +10,12 @@ COPY . .
 # `-am` builds platform-contracts too; `-o` is deliberately absent so a clean builder can resolve.
 # Tests are skipped HERE because the reactor's full suite runs in CI and in `./mvnw verify` — running
 # them per-image would run the same tests three times across three builds.
-RUN ./mvnw -pl services/review-core -am clean package -DskipTests
+# Retried on a TRANSIENT dependency-download failure, not on a build failure. This build pulls a
+# few hundred artifacts, and a dropped connection to Maven Central failed the whole image — which
+# in a four-image release means no digests are written and nothing can be deployed at all. The
+# script classifies the failure and re-runs only a transfer problem; a compile or test failure
+# exits immediately, because repeating it would bury the real error.
+RUN ./infrastructure/build/mvn-package-retry.sh services/review-core -DskipTests
 
 FROM eclipse-temurin:21-jre
 

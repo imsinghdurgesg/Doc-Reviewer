@@ -22,8 +22,13 @@ gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
 # The Maven reactor must build first: each service Dockerfile compiles from the repository root, and
 # building all four in parallel would run four full reactor builds.
+#
+# Retried on a TRANSIENT download failure only. A dropped connection to Maven Central here fails the
+# release before any image is built; twice in one day a release was lost to
+# "failed to respond" and "Premature end of Content-Length" on unrelated artifacts. The script
+# classifies the failure, so a compile error still fails immediately rather than being repeated.
 log "building the reactor"
-./mvnw -q -DskipTests package
+./infrastructure/build/mvn-package-retry.sh . -q -DskipTests
 
 # linux/amd64 explicitly. A build on an Apple-silicon machine otherwise produces arm64 images that
 # the VM cannot run, and the failure is an exec-format error rather than anything about architecture.
