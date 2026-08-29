@@ -78,7 +78,8 @@ class ApplicabilitySeparationTest {
             return new Finding("f-1", "CMP-1", "v-1", "rs-1", "R1", null, "Title",
                     status, null, null,
                     List.of("s-1"), List.of("p-1"), List.of(), List.of(),
-                    "reason", null, 0.9, false, applicability, null, null, null);
+                    "reason", null, 0.9, false, applicability, null, null, null,
+                null, List.of(), true);
         }
 
         @Test

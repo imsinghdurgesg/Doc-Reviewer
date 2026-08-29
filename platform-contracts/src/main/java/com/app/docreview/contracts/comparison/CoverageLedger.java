@@ -73,17 +73,60 @@ public record CoverageLedger(
          * <p>Terminal, so it does not block completion: doubt about scope must not stall a review
          * (§17.6). It surfaces as its own count instead.
          */
-        UNCERTAIN_APPLICABILITY;
+        UNCERTAIN_APPLICABILITY,
+
+        /**
+         * Compared, but our extracted representation of the standard was incomplete. §18.3.
+         *
+         * <p>The requirement WAS evaluated and produced evidence, so this is not a failure and not an
+         * untested requirement — treating it as either would misdirect the reviewer. What is missing is
+         * a clause for an obligation the standard states, which is a defect in OUR extraction rather
+         * than in the uploaded document.
+         *
+         * <p>Terminal, and deliberately not retryable: no number of model calls can supply a clause the
+         * extractor never produced. Before this state existed the case surfaced as FAILED and invited a
+         * retry that could not succeed — CHG-08-R2 consumed eight model calls that way.
+         *
+         * <p>Excluded from the alignment conclusion, because the obligation was never assessed.
+         */
+        EXTRACTION_REVIEW_REQUIRED;
 
         /**
          * Whether a comparison actually ran and produced a verdict for this requirement.
          *
-         * <p>The distinction coverage arithmetic depends on. A positive test on the two verdict-bearing
+         * <p>The distinction coverage arithmetic depends on. A positive test on the verdict-bearing
          * states, so a future state defaults to "no verdict" — the safe direction, because counting a
          * requirement as evaluated when it was not is how a report claims coverage it does not have.
+         *
+         * <p>{@code EXTRACTION_REVIEW_REQUIRED} counts: the comparison ran, cited evidence, and left a
+         * reviewable result. Its exclusion from the CONCLUSION is a separate question from whether it
+         * was covered — see {@link #conclusionEligible()}.
          */
         public boolean producedVerdict() {
+            return this == EVALUATED || this == UNCERTAIN_APPLICABILITY
+                    || this == EXTRACTION_REVIEW_REQUIRED;
+        }
+
+        /**
+         * Whether this entry may contribute to the alignment conclusion.
+         *
+         * <p>Separate from {@link #producedVerdict()} because coverage and conclusion are different
+         * claims. An extraction-gap result is covered — it was compared and is reviewable — but must not
+         * support a positive compliance statement, since a stated obligation went unassessed.
+         */
+        public boolean conclusionEligible() {
             return this == EVALUATED || this == UNCERTAIN_APPLICABILITY;
+        }
+
+        /**
+         * Whether re-running the model could change this outcome.
+         *
+         * <p>False for an extraction gap: the missing clause is upstream of the model, so a retry spends
+         * calls to reach the same wall. This is what makes the state terminal-and-reviewable rather than
+         * a coverage gap the UI would offer to retry.
+         */
+        public boolean retryable() {
+            return this == FAILED || this == PENDING;
         }
 
         /**
@@ -159,6 +202,28 @@ public record CoverageLedger(
     public long uncertainApplicabilityCount() {
         return entries.stream()
                 .filter(e -> e.state() == CoverageState.UNCERTAIN_APPLICABILITY).count();
+    }
+
+    /**
+     * Requirements compared against an incomplete extraction of the standard (§18.3).
+     *
+     * <p>Reported as its own line rather than folded into either the evaluated total or the untested
+     * total: it is neither a clean verdict nor a gap in coverage, and both roundings hide the fact that
+     * the system, not the document, is what needs attention.
+     */
+    public long extractionReviewRequiredCount() {
+        return entries.stream()
+                .filter(e -> e.state() == CoverageState.EXTRACTION_REVIEW_REQUIRED).count();
+    }
+
+    /**
+     * Requirements whose verdict may support the alignment conclusion (§18.6).
+     *
+     * <p>Always less than or equal to {@link #evaluatedCount()}. The difference is the requirements that
+     * were measured but cannot be concluded from.
+     */
+    public long conclusionEligibleCount() {
+        return entries.stream().filter(e -> e.state().conclusionEligible()).count();
     }
 
     /** Requirements deliberately excluded, with a reason. */

@@ -18,3 +18,7 @@ dist/
 .idea/
 *.iml
 .vscode/
+
+# Python bytecode from infrastructure scripts
+__pycache__/
+*.pyc

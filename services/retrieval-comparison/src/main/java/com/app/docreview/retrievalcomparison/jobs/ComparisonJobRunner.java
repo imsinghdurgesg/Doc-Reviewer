@@ -65,6 +65,8 @@ public class ComparisonJobRunner {
     private final com.app.docreview.retrievalcomparison.comparison.application.RequirementApplicabilityCoordinator applicabilityCoordinator;
     /** Builds the coverage ledger that makes "no finding" interpretable (§17.6). */
     private final com.app.docreview.retrievalcomparison.comparison.application.CoverageLedgerService coverageLedgerService;
+    /** Governed integrity decisions, consulted before any model call (§18.3). */
+    private final com.app.docreview.retrievalcomparison.comparison.application.RequirementIntegrityLookup integrityRecords;
     private final VectorIndexingService indexingService;
     private final com.app.docreview.retrievalcomparison.retrieval.document.StandardSelectionService standardSelection;
     /**
@@ -817,7 +819,10 @@ public class ComparisonJobRunner {
                 f.standardSpanIds(), f.processSpanIds(), f.nearestProcessSpanIds(),
                 f.clauseResults(), f.reason(), f.recommendedAction(), f.confidence(),
                 f.needsHumanReview(), f.applicabilityStatus(), f.applicabilityReason(),
-                f.applicabilityDecidedBy(), provenance);
+                f.applicabilityDecidedBy(), provenance,
+                // Carried through the retry stamp: a retry that reproduces an extraction gap must
+                // stay excluded from the conclusion, not silently become eligible.
+                f.evaluationLimitation(), f.unmappedStandardObligations(), f.conclusionEligible());
     }
 
     private UnitOutcome evaluateOne(
@@ -843,6 +848,26 @@ public class ComparisonJobRunner {
                 // The decision travels back so the ledger records a SKIPPED row with the reason, which
                 // keeps the control VISIBLE in the results rather than vanishing from them.
                 return new UnitOutcome(requirement.getRequirementId(), null, null, applicability);
+            }
+
+            // REQUIREMENT INTEGRITY SECOND, still before any retrieval or model call (§18.3).
+            //
+            // A requirement whose extraction omits a stated obligation cannot be answered: the model
+            // would see the shortfall and have no clause to record it against, return an invalid
+            // PARTIAL, and fail validation twice. Asking anyway cost two model calls per requirement
+            // and produced nothing a reviewer could act on.
+            //
+            // Deterministic and governed, NOT delegated to the model. Letting the model decide this for
+            // itself is what took evaluated requirements from 187 to 46: the branch was reachable on
+            // every requirement and it used it for ordinary comparison difficulty.
+            var integrity = integrityRecords.forRequirement(requirement);
+            if (integrity != null && integrity.blocksComparison()) {
+                log.info("Requirement {} withheld from comparison: {} ({} unmapped obligation(s))",
+                        requirement.getRequirementId(), integrity.getIntegrityStatus(),
+                        integrity.getMissingObligations().size());
+                return new UnitOutcome(requirement.getRequirementId(),
+                        extractionReviewFinding(job, requirement, integrity, applicability),
+                        null, applicability);
             }
 
             var retrieved = retrievalService.retrieve(
@@ -892,6 +917,67 @@ public class ComparisonJobRunner {
      * them an IllegalStateException from anywhere in retrieval or validation is indistinguishable
      * from any other, and the operator is left with a type name and no line number.
      */
+    /**
+     * The deterministic result for a requirement withheld from the comparison model. §18.3, §18.6.
+     *
+     * <p>No model call, so nothing here is a judgement about the DOCUMENT — every field comes from the
+     * governed integrity record. The finding exists so the requirement stays VISIBLE in the results: a
+     * withheld control that produced no row at all would be indistinguishable from a passing one, which
+     * is the misreading §17.6 exists to prevent.
+     *
+     * <p>Standard spans are cited and process spans are empty, deliberately. The obligation is a fact
+     * about the standard; no claim is made about what the document does or does not say, because nothing
+     * was compared.
+     */
+    private Finding extractionReviewFinding(
+            WorkerJob job,
+            StandardRequirementDocument requirement,
+            com.app.docreview.retrievalcomparison.comparison.domain.RequirementIntegrity integrity,
+            com.app.docreview.contracts.comparison.ApplicabilityDecision applicability) {
+
+        var obligations = integrity.getMissingObligations();
+        var standardSpans = obligations.stream()
+                .flatMap(o -> o.standardSpanIds().stream())
+                .distinct()
+                .toList();
+
+        return new Finding(
+                "FND-" + java.util.UUID.randomUUID().toString().substring(0, 12),
+                job.getComparisonId(),
+                requirement.getStandardVersionId(),
+                requirement.getRequirementSetVersion(),
+                requirement.getRequirementId(),
+                requirement.getParentControlId(),
+                requirement.getTitle(),
+                // INSUFFICIENT_EVIDENCE, qualified by the limitation below. Not ALIGNED, which would
+                // claim compliance with an obligation nobody assessed; not MISSING, which would assert a
+                // gap in the document when the gap is in our extraction.
+                com.app.docreview.contracts.enums.ComparisonStatus.INSUFFICIENT_EVIDENCE,
+                null,
+                requirement.getSeverity(),
+                standardSpans,
+                // No process evidence: nothing was compared, so citing passages would imply otherwise.
+                List.of(),
+                List.of(),
+                List.of(),
+                "The standard states an obligation that is not represented in the extracted atomic "
+                        + "clauses used for automated comparison, so no clause-complete result could be "
+                        + "produced. This requirement is excluded from the alignment conclusion.",
+                null,
+                // Not a model confidence. A deterministic record is certain about what it asserts —
+                // that the extraction is incomplete — which is the only claim this finding makes.
+                1.0,
+                true,
+                applicability.status(),
+                applicability.reason(),
+                applicability.decidedBy(),
+                null,
+                com.app.docreview.contracts.enums.EvaluationLimitation
+                        .STANDARD_REQUIREMENT_EXTRACTION_INCOMPLETE,
+                obligations,
+                false);
+    }
+
     private UnitOutcome unexpectedFailure(StandardRequirementDocument requirement, Throwable cause) {
         log.warn("Comparison of requirement {} failed: {}: {}",
                 requirement.getRequirementId(),

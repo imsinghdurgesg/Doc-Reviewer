@@ -170,6 +170,21 @@ public class ComparisonService {
     public Comparison retryRequirement(String publicId, String requirementId, String ownerOrNull) {
         var comparison = getVisibleTo(publicId, ownerOrNull);
 
+        // Refused BEFORE the model is invoked. An extraction gap is upstream of the comparison: the
+        // clause the model needs was never produced, so every retry reaches the same wall. CHG-08-R2
+        // spent eight model calls proving that. Rejecting it here turns a silent, repeatable waste
+        // into a statement of what actually has to be fixed.
+        var existing = comparison.getCoverageLedger();
+        if (existing != null && existing.entries().stream()
+                .anyMatch(e -> requirementId.equals(e.requirementId())
+                        && !e.state().retryable())) {
+            throw ApiException.conflict("RETRY_NOT_APPLICABLE",
+                    "Requirement " + requirementId + " was compared, but the extracted standard "
+                            + "requirement was incomplete. Retrying cannot supply the missing clause; "
+                            + "the extraction must be corrected. This result is excluded from the "
+                            + "conclusion and is flagged for review.");
+        }
+
         if (!findingReader.retryRequirement(publicId, requirementId)) {
             throw ApiException.conflict("RETRY_FAILED",
                     "Requirement " + requirementId + " could not be evaluated on retry. It remains "
@@ -228,9 +243,21 @@ public class ComparisonService {
                             .CoverageState.SKIPPED)
                     .count();
 
+            long extractionReview = ledger.extractionReviewRequiredCount();
+
             if (untested == 0) {
+                // Every requirement produced a verdict, so the comparison IS complete — an extraction
+                // gap is a result, not a gap in coverage.
                 comparison.setState(ComparisonState.COMPLETED);
-                comparison.setStateMessage(null);
+                // But COMPLETED with no message would imply the conclusion rests on all of them. It
+                // does not: an extraction-gap result is excluded, because a stated obligation went
+                // unassessed. Saying so here is the difference between a complete review and a review
+                // that merely finished.
+                comparison.setStateMessage(extractionReview == 0 ? null
+                        : extractionReview + " of " + ledger.expectedCount()
+                                + " requirements were compared against an incomplete extracted "
+                                + "requirement and are excluded from the conclusion. They need "
+                                + "extraction review, not re-evaluation.");
             } else {
                 // Still gaps, so still partial — with a message that names the CURRENT shortfall
                 // rather than the one from the original run.

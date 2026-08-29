@@ -460,6 +460,24 @@ export interface CoverageSummary {
   applicabilityConfirmed: number;
   /** A SUBSET of `compared`, not a separate outcome. */
   applicabilityReviewRequired: number;
+  /**
+   * A SUBSET of `compared`: measured, but against an incomplete extraction of the standard.
+   *
+   * Counted under `compared` because the comparison ran and produced cited evidence — calling it
+   * "not evaluated" would misdirect the reviewer to their own document. Excluded from
+   * `conclusionEligible` because a stated obligation went unassessed.
+   *
+   * Optional: comparisons recorded before COMPARE-SCHEMA-V3 have no such entries, and defaulting a
+   * missing value to 0 is correct for them.
+   */
+  extractionReviewRequired?: number;
+  /**
+   * Requirements whose verdict may support the alignment conclusion. A SUBSET of `compared`.
+   *
+   * Sent rather than derived so the client and server cannot disagree about what the conclusion
+   * rests on.
+   */
+  conclusionEligible?: number;
   /** Excluded by a governed applicability decision. Disjoint from `compared`. */
   notApplicable: number;
   /** Produced no verdict at all: never attempted, or failed. Disjoint from `compared`. */
@@ -475,11 +493,16 @@ export interface CoverageSummary {
  * Checked in the UI as well as the server: a summary that does not add up is a coverage claim with a
  * hole in it, and the hole is invisible in any single number. Better to say so than to render numbers
  * a reviewer would reasonably trust.
+ *
+ * `extractionReviewRequired` joins the children of `compared`. Omitting it would have made every
+ * comparison containing one fail reconciliation and render the "counts do not add up" defect banner —
+ * a false alarm about the very thing this check exists to make trustworthy.
  */
 export function coverageReconciles(c: CoverageSummary): boolean {
+  const extractionReview = c.extractionReviewRequired ?? 0;
   return (
     c.compared + c.notApplicable + c.notEvaluated === c.totalRequirements &&
-    c.applicabilityConfirmed + c.applicabilityReviewRequired === c.compared
+    c.applicabilityConfirmed + c.applicabilityReviewRequired + extractionReview === c.compared
   );
 }
 
@@ -487,7 +510,13 @@ export interface CoverageEntry {
   requirementId: string;
   requirementTitle: string | null;
   standardVersionId: string;
-  state: "PENDING" | "FAILED" | "SKIPPED" | "UNCERTAIN_APPLICABILITY" | "EVALUATED";
+  state:
+    | "PENDING"
+    | "FAILED"
+    | "SKIPPED"
+    | "UNCERTAIN_APPLICABILITY"
+    | "EXTRACTION_REVIEW_REQUIRED"
+    | "EVALUATED";
   reason: string | null;
 }
 
@@ -502,6 +531,11 @@ export function coverageStateLabel(state: CoverageEntry["state"]): string {
       return "Not applicable";
     case "UNCERTAIN_APPLICABILITY":
       return "Applicability review required";
+    case "EXTRACTION_REVIEW_REQUIRED":
+      // NOT "Insufficient evidence". The generic label points the reviewer at their own document,
+      // when the obligation was in fact missing from OUR extraction of the standard — so it sends
+      // them looking for something the system never asked about.
+      return "Requirement extraction needs review";
     default:
       return "Evaluated";
   }
@@ -510,11 +544,27 @@ export function coverageStateLabel(state: CoverageEntry["state"]): string {
 /**
  * True when this entry means a requirement went unmeasured.
  *
- * Distinguishes the two legitimate non-evaluations from the two gaps: NOT_APPLICABLE and
- * UNCERTAIN_APPLICABILITY are decisions, while PENDING and FAILED are absences of one.
+ * Distinguishes the legitimate non-evaluations from the gaps: NOT_APPLICABLE,
+ * UNCERTAIN_APPLICABILITY and EXTRACTION_REVIEW_REQUIRED are all outcomes of a comparison that ran,
+ * while PENDING and FAILED are absences of one.
+ *
+ * An allowlist rather than a negation, deliberately: this function gates the Retry action, and a new
+ * state must default to NOT retryable. An extraction gap in particular cannot be fixed by another
+ * model call — the missing clause is upstream of the model — so offering Retry would spend calls to
+ * reach the same wall, which is the exact behaviour this release removes.
  */
 export function isCoverageGap(entry: CoverageEntry): boolean {
   return entry.state === "PENDING" || entry.state === "FAILED";
+}
+
+/**
+ * True when the extracted standard requirement, not the uploaded document, is what needs attention.
+ *
+ * Kept separate from `isCoverageGap` so the panel can show this entry with its own explanation and
+ * without a Retry button.
+ */
+export function isExtractionReviewRequired(entry: CoverageEntry): boolean {
+  return entry.state === "EXTRACTION_REVIEW_REQUIRED";
 }
 
 /**

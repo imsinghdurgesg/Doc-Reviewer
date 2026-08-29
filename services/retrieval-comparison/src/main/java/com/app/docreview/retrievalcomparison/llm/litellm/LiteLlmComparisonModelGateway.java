@@ -41,6 +41,11 @@ public class LiteLlmComparisonModelGateway implements ComparisonModelGateway {
 
     @Override
     public Result compare(ComparisonModelRequest request) {
+        return compare(request, null);
+    }
+
+    @Override
+    public Result compare(ComparisonModelRequest request, String repairInstruction) {
         String nonce = HexFormat.of().formatHex(randomBytes());
         long started = System.nanoTime();
 
@@ -59,7 +64,11 @@ public class LiteLlmComparisonModelGateway implements ComparisonModelGateway {
 
         try {
             var response = chatClient.prompt()
-                    .system(ComparisonPrompt.system(nonce, runtime.comparisonInstructions()))
+                    // A repair instruction goes through the SAME appended-guidance channel as admin
+                    // text, so the protected instructions still take precedence over it (§16.3).
+                    .system(ComparisonPrompt.system(nonce,
+                            ComparisonPrompt.withRepair(runtime.comparisonInstructions(),
+                                    repairInstruction)))
                     .user(ComparisonPrompt.user(request, nonce))
                     .options(options)
                     .call();

@@ -265,6 +265,24 @@ public final class ComparisonDtos {
             /** Compared, but whether it governs this document is unresolved. A subset of compared. */
             long applicabilityReviewRequired,
 
+            /**
+             * Compared against an incomplete extraction of the standard. A subset of compared. §18.3.
+             *
+             * <p>Under {@code compared} because the comparison ran and cited evidence — reporting it as
+             * not evaluated would send the reviewer to search their own document for an obligation the
+             * system never asked about. Excluded from {@code conclusionEligible} because a stated
+             * obligation went unassessed.
+             */
+            long extractionReviewRequired,
+
+            /**
+             * Requirements whose verdict may support the alignment conclusion. A subset of compared.
+             *
+             * <p>Sent rather than derived client-side for the same reason as every other count here:
+             * what the conclusion rests on must not vary by who is reading it.
+             */
+            long conclusionEligible,
+
             /** Excluded by a governed applicability decision. Disjoint from compared. */
             long notApplicable,
             /** Produced no verdict at all — never attempted, or failed. Disjoint from compared. */
@@ -280,10 +298,15 @@ public final class ComparisonDtos {
          * <p>Exposed so a client can assert it rather than trust it. A summary whose parts do not
          * account for the whole is a coverage claim with a hole in it, and the hole is invisible in
          * any single number.
+         *
+         * <p>{@code extractionReviewRequired} is one of the children of {@code compared}. Leaving it
+         * out would make every comparison containing one fail this check and render the "counts do not
+         * add up" banner — a false defect report about the check itself.
          */
         public boolean countsReconcile() {
             return compared + notApplicable + notEvaluated == totalRequirements
-                    && applicabilityConfirmed + applicabilityReviewRequired == compared;
+                    && applicabilityConfirmed + applicabilityReviewRequired
+                            + extractionReviewRequired == compared;
         }
     }
 

@@ -64,12 +64,30 @@ public class CoverageLedgerService {
         // needs it to tell "evaluated and ready to act on" from "evaluated with an open scope
         // question". Deriving that from a second source could disagree with the finding a reviewer
         // reads (§12.5).
+        // KEYED BY (standardVersionId, requirementId), not by requirement id alone.
+        //
+        // Requirement ids RECUR ACROSS STANDARDS — 47 of 191 in one three-standard comparison, because
+        // organisations derive their standards from common frameworks and keep the numbering. Keyed on
+        // the id alone, the first standard's finding won and every later standard's was discarded, so
+        // the ledger described one requirement using another standard's verdict.
+        //
+        // Observed: CHG-08-2 was withheld for an incomplete extraction in one standard and ALIGNED in
+        // another. The ledger reported EVALUATED for both, which silently returned a requirement that
+        // was never assessed to the alignment conclusion.
         var byRequirement = new LinkedHashMap<String, Finding>();
         if (findings != null) {
             for (var finding : findings) {
-                byRequirement.putIfAbsent(finding.requirementId(), finding);
+                byRequirement.putIfAbsent(
+                        findingKey(finding.standardVersionId(), finding.requirementId()), finding);
             }
         }
+        // KNOWN NARROWER THAN THE ABOVE: these two are still keyed by bare requirement id, so when an
+        // id recurs across standards a failure or skip recorded for one marks the same id in all of
+        // them. The consequence is bounded and errs toward VISIBILITY — a requirement is reported as
+        // failed or skipped when a sibling was, never the reverse — whereas the finding key erred the
+        // dangerous way, returning an unassessed requirement to the conclusion. Fixing these needs the
+        // standard version threaded through the applicability coordinator and the job runner's failure
+        // set, which is a wider change than this defect warrants.
         var failed = failedIds == null ? Set.<String>of() : failedIds;
         var skips = skipped == null ? Map.<String, String>of() : skipped;
         var notAttempted = notAttemptedReasons == null
@@ -91,12 +109,19 @@ public class CoverageLedgerService {
             // Order matters. A requirement that both produced a finding and reported an error is
             // EVALUATED: the verdict exists, so its absence cannot be misread. Checking failure first
             // would discard a real finding.
-            var finding = byRequirement.get(id);
+            var finding = byRequirement.get(
+                    findingKey(requirement.getStandardVersionId(), id));
             if (finding != null) {
                 // Compared either way. The split is about what the reviewer must do next: an
                 // UNCERTAIN verdict is actionable only once someone confirms the requirement governs
                 // this document, so it is counted separately rather than folded into EVALUATED.
-                if (finding.applicability() == ApplicabilityStatus.UNCERTAIN) {
+                if (finding.extractionIncomplete()) {
+                    // Checked BEFORE applicability: an extraction gap means the requirement we
+                    // evaluated was not the whole requirement, so no scope conclusion drawn from it is
+                    // safe to report as the reviewer's next action. The extraction defect comes first.
+                    state = CoverageLedger.CoverageState.EXTRACTION_REVIEW_REQUIRED;
+                    detail = extractionDetail(finding);
+                } else if (finding.applicability() == ApplicabilityStatus.UNCERTAIN) {
                     state = CoverageLedger.CoverageState.UNCERTAIN_APPLICABILITY;
                     detail = finding.applicabilityReason() == null
                             ? "Applicability could not be determined"
@@ -131,9 +156,41 @@ public class CoverageLedgerService {
 
         var ledger = new CoverageLedger(comparisonId, entries);
         // Counts only, never requirement text (§35).
-        log.info("Coverage for {}: {}/{} evaluated, {} untested, complete={}",
+        log.info("Coverage for {}: {}/{} evaluated, {} untested, {} extraction-review, "
+                        + "{} conclusion-eligible, complete={}",
                 comparisonId, ledger.evaluatedCount(), ledger.expectedCount(),
-                ledger.untestedCount(), ledger.isComplete());
+                ledger.untestedCount(), ledger.extractionReviewRequiredCount(),
+                ledger.conclusionEligibleCount(), ledger.isComplete());
         return ledger;
+    }
+
+    /**
+     * The reviewer-facing reason an extraction-gap entry exists.
+     *
+     * <p>Names the OBLIGATION TYPE and count rather than the obligation text. The text is standard
+     * content and safe to show in the UI, but the ledger detail reaches the log line above, and §35
+     * forbids requirement text there.
+     */
+    /**
+     * The identity of a finding within a comparison: its standard version plus its requirement id.
+     *
+     * <p>A single method so the index and the lookup cannot drift apart — writing one key and reading
+     * another silently returns null, which the ledger would record as an untested requirement.
+     */
+    private static String findingKey(String standardVersionId, String requirementId) {
+        return standardVersionId + " " + requirementId;
+    }
+
+    private static String extractionDetail(Finding finding) {
+        var obligations = finding.unmappedStandardObligations();
+        if (obligations.isEmpty()) {
+            return "The extracted requirement was incomplete";
+        }
+        var types = obligations.stream()
+                .map(o -> o.obligationType() == null ? "OTHER" : o.obligationType().name())
+                .distinct()
+                .collect(java.util.stream.Collectors.joining(", "));
+        return "%d stated obligation(s) absent from the extracted clauses (%s)"
+                .formatted(obligations.size(), types);
     }
 }

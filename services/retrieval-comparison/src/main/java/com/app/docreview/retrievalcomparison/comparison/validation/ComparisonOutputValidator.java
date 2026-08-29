@@ -35,7 +35,17 @@ import java.util.Set;
 @Slf4j
 public class ComparisonOutputValidator {
 
-    public static final String SCHEMA_VERSION = "COMPARE-SCHEMA-V1";
+    /**
+     * The promoted schema. Architecture §18.1, §19.2.
+     *
+     * <p>V2 is the shape {@link ComparisonModelOutput} defines today. A withdrawn revision added a
+     * model-reported extraction limitation and was rolled back: the branch was reachable on every
+     * requirement, and the model used it for ordinary comparison difficulty rather than for the rare
+     * case it was built for. Those fields are gone from the output record, so nothing remains to
+     * validate — and whether a requirement was extracted completely is now decided deterministically at
+     * ingestion, before any model call.
+     */
+    public static final String SCHEMA_VERSION = "COMPARE-SCHEMA-V2";
 
     /**
      * @param allowedStandardSpanIds spans supplied as standard evidence

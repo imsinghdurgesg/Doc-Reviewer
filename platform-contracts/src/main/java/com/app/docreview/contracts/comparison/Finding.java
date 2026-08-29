@@ -86,7 +86,44 @@ public record Finding(
          * non-null value is the honest signal that this particular row was produced separately, and
          * carries the versions that produced it so a reader can tell how it differs.
          */
-        RetryProvenance retriedAs
+        RetryProvenance retriedAs,
+
+        /**
+         * Why no conclusion-eligible result was possible. Null in the ordinary case. §18.6.
+         *
+         * <p>Distinguishes "your document lacked evidence" from "our extraction of the standard was
+         * incomplete". Both surface as INSUFFICIENT_EVIDENCE, and conflating them sends the reviewer to
+         * search their own document for an obligation the system never asked about.
+         */
+        com.app.docreview.contracts.enums.EvaluationLimitation evaluationLimitation,
+
+        /**
+         * The obligations that were stated but never assessed. Empty in the ordinary case. §18.6.
+         *
+         * <p>Carries verbatim source text and the standard spans containing it, both validated at
+         * §18.2, so the reviewer sees the exact obligation rather than a claim that one exists.
+         */
+        List<UnmappedStandardObligation> unmappedStandardObligations,
+
+        /**
+         * Whether this finding may count toward the alignment conclusion. §18.6.
+         *
+         * <p><strong>A real component, not a derived accessor.</strong> Jackson serializes record
+         * COMPONENTS; a computed accessor would be absent from every JSON response, so the UI would
+         * default it and silently include an excluded finding in the conclusion. That exact mistake has
+         * already cost this codebase once, on {@code reclassified}.
+         *
+         * <p>Stored rather than recomputed at read time for the §19.2 reason: a finding excluded under
+         * the rules in force when it ran must stay excluded, even if those rules later change.
+         *
+         * <p><strong>Boxed, NOT primitive.</strong> Every finding stored before this field existed has
+         * no such key, so Mongo supplies null — and a primitive {@code boolean} cannot accept null,
+         * which fails construction. As a primitive this made EVERY historical finding unreadable and
+         * took out the whole History view, not just the new behaviour. Null is normalised by
+         * {@link #conclusionEligible()} to the historically accurate answer: a finding recorded before
+         * limitations existed was, by definition, eligible.
+         */
+        Boolean conclusionEligible
 ) {
 
     /**
@@ -109,6 +146,46 @@ public record Finding(
      */
     public boolean actionable() {
         return applicability().shouldCompare() && status != ComparisonStatus.ALIGNED;
+    }
+
+    /**
+     * Whether the extracted standard requirement was too incomplete to evaluate. §18.6.
+     *
+     * <p>A positive test rather than callers comparing the enum, so the UI can label it "Requirement
+     * extraction needs review" instead of the generic "Insufficient evidence" — the distinction the
+     * limitation exists to make.
+     */
+    public boolean extractionIncomplete() {
+        return evaluationLimitation
+                == com.app.docreview.contracts.enums.EvaluationLimitation
+                        .STANDARD_REQUIREMENT_EXTRACTION_INCOMPLETE;
+    }
+
+    /** The unmapped obligations, never null. */
+    public List<UnmappedStandardObligation> unmappedStandardObligations() {
+        return unmappedStandardObligations == null ? List.of() : unmappedStandardObligations;
+    }
+
+    /**
+     * Whether this finding may count toward the alignment conclusion. Never null.
+     *
+     * <p>Named distinctly from the {@code conclusionEligible} component because a record accessor must
+     * return the component's own type — and the component is {@link Boolean} so that findings stored
+     * before this field existed, which carry no such key, can still be read. Callers should prefer this
+     * method; the raw component is for serialization.
+     *
+     * <p>A stored null means the finding predates evaluation limitations, so it was produced under
+     * rules where every verdict counted — eligible is both the historically accurate answer and the one
+     * that keeps old comparisons reading as they did.
+     *
+     * <p>A limitation always wins over a stored true, so a finding cannot be eligible and limited at
+     * once no matter what was written.
+     */
+    public boolean countsTowardConclusion() {
+        if (evaluationLimitation != null) {
+            return evaluationLimitation.conclusionEligible();
+        }
+        return conclusionEligible == null || conclusionEligible;
     }
 
     /**

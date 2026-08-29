@@ -40,6 +40,30 @@ public final class ComparisonPrompt {
      * retry hit the identical wall four times on CHG-09-R2.
      *
      * <p>A rule enforced but unstated is not a guardrail; it is a trap the model cannot see.
+     *
+     * <p><strong>V3 was withdrawn, and V2 is the promoted contract.</strong> V3 let the model report
+     * that OUR extraction of the standard was incomplete. The intent was to give the PARTIAL rule an
+     * exit for the ~11 requirements whose timing obligation was dropped during extraction. The effect
+     * was that the branch became available on every requirement, and the model took it whenever a
+     * comparison was hard — for ordinary evidence uncertainty, for obligations a clause already
+     * covered, and for reasoning it could not map cleanly onto the clause list.
+     *
+     * <p>Measured across 191 requirements: evaluated fell to 46, then 114 after a prompt recalibration,
+     * against 187 under V2. 58 responses claimed the limitation with no supporting obligation and
+     * failed validation twice. Roughly a dozen more named an obligation a clause did represent. Two
+     * successive prompt revisions did not fix it, because the misfire rate multiplies across every
+     * requirement and each misfire costs the whole control.
+     *
+     * <p>The design error, not the wording: <em>the comparison model judges the process against the
+     * supplied requirement. It must not also judge whether the requirement extractor did its job.</em>
+     * It has no basis for that second judgement — it cannot see the extractor, the provenance spans it
+     * was not given, or the other requirements in the set.
+     *
+     * <p>That responsibility now sits with requirement-integrity validation at ingestion
+     * ({@code RequirementIntegrityStatus}), which decides deterministically and BEFORE any model call.
+     * The known-incomplete requirements never reach the comparison model at all, so there is no
+     * unanswerable clause question to ask. See
+     * {@code docs/extraction/off-clause-obligation-regression-set.md}.
      */
     public static final String PROMPT_VERSION = "COMPARE-V2";
 
@@ -78,6 +102,51 @@ public final class ComparisonPrompt {
                 %s
                 GUIDANCE-%s>>>
                 """.formatted(nonce, nonce, instructions.strip(), nonce);
+    }
+
+    /**
+     * The targeted correction for a PARTIAL that named no unsatisfied clause. Architecture §18.4.
+     *
+     * <p>§18.4's one retry re-sent an identical request, which only helps a transient malformation. This
+     * failure is DETERMINISTIC — the model returns the same answer — so the retry has to say what was
+     * wrong. Naming the three admissible shapes is what makes attempt 2 different from attempt 1.
+     *
+     * <p>It offers only choices the model can verify against the evidence it already has: name a
+     * supplied clause, or move to ALIGNED, or state uncertainty. Deliberately no option to report that
+     * the CLAUSE LIST is at fault — that judgement belongs to requirement-integrity validation at
+     * ingestion, and offering it here is what made V3 misfire across every requirement.
+     */
+    public static final String INCOMPLETE_PARTIAL_REPAIR = """
+            Your previous response was REJECTED: it reported PARTIAL without naming an unsatisfied \
+            clause, which cannot be reviewed because nothing identifies what falls short.
+
+            Choose whichever is true of the evidence:
+
+            If a supplied clause is not met, return PARTIAL and list that clause's ID in \
+            unsatisfiedClauseIds. Use only IDs from the supplied clause list; an invented ID is \
+            rejected.
+
+            If every supplied clause IS met, the status is ALIGNED, not PARTIAL.
+
+            If the evidence does not let you decide, return INSUFFICIENT_EVIDENCE with a stated reason.\
+            """;
+
+    /**
+     * Combines administrator guidance with a repair instruction, either of which may be absent.
+     *
+     * <p>The repair goes last so the model reads it as the most specific correction, and both travel
+     * through the appended-guidance channel where the protected instructions still win (§16.3).
+     */
+    public static String withRepair(String instructions, String repair) {
+        boolean hasInstructions = instructions != null && !instructions.isBlank();
+        boolean hasRepair = repair != null && !repair.isBlank();
+        if (!hasRepair) {
+            return instructions;
+        }
+        if (!hasInstructions) {
+            return repair;
+        }
+        return instructions.strip() + "\n\n" + repair.strip();
     }
 
     private static String baseSystem(String nonce) {
@@ -128,6 +197,7 @@ public final class ComparisonPrompt {
                                         contradiction is a claim about what the document SAYS, so it
                                         must quote it.
                   INSUFFICIENT_EVIDENCE a stated reason for the uncertainty.
+
                 Allowed gapType values (PARTIAL only): WEAKER, INCOMPLETE, CONDITIONAL_ONLY, \
                 TIMING_MISMATCH, RESPONSIBILITY_MISMATCH, EVIDENCE_NOT_DOCUMENTED, SCOPE_MISMATCH.
 

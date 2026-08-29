@@ -284,6 +284,7 @@ public class ComparisonController {
 
         long compared = ledger.evaluatedCount();
         long reviewRequired = ledger.uncertainApplicabilityCount();
+        long extractionReview = ledger.extractionReviewRequiredCount();
         // "Not evaluated" is the reviewer-facing name for entries that produced no verdict at all —
         // PENDING and FAILED. Deliberately NOT untestedCount(), which also counts the not-applicable
         // and review-required entries reported on their own lines.
@@ -295,11 +296,13 @@ public class ComparisonController {
         var summary = new ComparisonDtos.CoverageSummary(
                 ledger.expectedCount(),
                 compared,
-                // Confirmed is compared MINUS review-required, derived rather than counted
-                // separately: two independent counts of overlapping sets is how a summary starts
-                // failing to add up.
-                compared - reviewRequired,
+                // Confirmed is compared MINUS the two subsets that need attention, derived rather
+                // than counted separately: two independent counts of overlapping sets is how a
+                // summary starts failing to add up.
+                compared - reviewRequired - extractionReview,
                 reviewRequired,
+                extractionReview,
+                ledger.conclusionEligibleCount(),
                 ledger.notApplicableCount(),
                 notEvaluated,
                 ledger.isComplete(),
@@ -311,9 +314,11 @@ public class ComparisonController {
         // a 500 that hides the findings entirely.
         if (!summary.countsReconcile()) {
             log.error("Coverage summary for {} does not reconcile: total={} compared={} "
-                            + "(confirmed={} reviewRequired={}) notApplicable={} notEvaluated={}",
+                            + "(confirmed={} reviewRequired={} extractionReview={}) "
+                            + "notApplicable={} notEvaluated={}",
                     ledger.comparisonId(), summary.totalRequirements(), summary.compared(),
                     summary.applicabilityConfirmed(), summary.applicabilityReviewRequired(),
+                    summary.extractionReviewRequired(),
                     summary.notApplicable(), summary.notEvaluated());
         }
         return summary;

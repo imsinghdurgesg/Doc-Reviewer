@@ -40,4 +40,22 @@ public record ComparisonModelOutput(
         String recommendedAction,
         double confidence,
         boolean needsHumanReview
-) {}
+) {
+
+    // DELIBERATELY ABSENT: evaluationLimitation and unmappedStandardObligations.
+    //
+    // A withdrawn revision let the model report that OUR extraction of the standard was incomplete.
+    // Because the branch was reachable on every requirement, the model took it whenever a comparison
+    // was hard — for ordinary evidence uncertainty, for obligations a clause already covered, and for
+    // reasoning it could not map onto the clause list. Across 191 requirements, evaluated fell from 187
+    // to 46; two prompt revisions did not fix it, because each misfire costs a whole control and the
+    // rate multiplies across the set.
+    //
+    // The model judges the PROCESS against the supplied requirement. Whether the requirement was
+    // extracted correctly is not a question it can answer — it cannot see the extractor, the provenance
+    // spans it was not given, or the rest of the set. That judgement belongs to requirement-integrity
+    // validation at ingestion, which is deterministic and runs BEFORE any model call.
+    //
+    // Keeping the fields off this record is what makes that structural rather than a matter of prompt
+    // wording: there is no field for the model to populate.
+}

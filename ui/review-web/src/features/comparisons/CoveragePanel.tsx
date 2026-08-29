@@ -9,6 +9,7 @@ import {
   coverageReconciles,
   coverageStateLabel,
   isCoverageGap,
+  isExtractionReviewRequired,
 } from "@/models/comparison";
 import { overlineLabel, palette } from "@/app/theme";
 
@@ -74,6 +75,7 @@ function EntryRow({ entry, onRetry, retrying }: {
 }) {
   const [open, setOpen] = useState(false);
   const gap = isCoverageGap(entry);
+  const extractionReview = isExtractionReviewRequired(entry);
 
   return (
     <Box sx={{ borderTop: `1px solid ${palette.border}` }}>
@@ -101,7 +103,15 @@ function EntryRow({ entry, onRetry, retrying }: {
         <Chip
           size="small"
           variant={gap ? "filled" : "outlined"}
-          color={gap ? "error" : entry.state === "UNCERTAIN_APPLICABILITY" ? "warning" : "default"}
+          color={
+            gap
+              ? "error"
+              // Warning, not error: the comparison ran and produced evidence. Red would read as a
+              // failed requirement and send the reviewer looking for a fault in their document.
+              : entry.state === "UNCERTAIN_APPLICABILITY" || extractionReview
+                ? "warning"
+                : "default"
+          }
           label={coverageStateLabel(entry.state)}
         />
       </Box>
@@ -121,6 +131,29 @@ function EntryRow({ entry, onRetry, retrying }: {
             requirement is absent from it — the absence looks exactly like compliance, which is the
             misreading §17.6 exists to prevent.
           */}
+          {/*
+            The extraction-gap explanation, which is deliberately NOT the generic
+            "insufficient evidence" wording. The obligation was missing from OUR extraction of the
+            standard, so telling the reviewer their evidence was insufficient sends them to search
+            their own document for something the system never asked about.
+
+            It also says retrying is pointless, because the previous behaviour offered exactly that
+            and it could never succeed.
+          */}
+          {extractionReview && (
+            <Box sx={{ mt: 1 }}>
+              <Typography sx={{ fontSize: 12.5, lineHeight: 1.55, color: "#7a5a12" }}>
+                This requirement was compared, but the extracted standard requirement was
+                incomplete: the standard states an obligation that no extracted clause represents.
+                The result is excluded from the final alignment conclusion because that obligation
+                was never assessed.
+              </Typography>
+              <Typography sx={{ fontSize: 12, mt: 0.75, color: palette.muted }}>
+                Re-evaluating will not change this — the missing clause comes from extraction, not
+                from the comparison. The extracted requirement needs review.
+              </Typography>
+            </Box>
+          )}
           {gap && (
             <Stack direction="row" spacing={1.5}
               sx={{ mt: 1, alignItems: "center", flexWrap: "wrap" }}>
@@ -167,7 +200,13 @@ export function CoveragePanel({ coverage, exempt, inProgress, onRetry, retryingI
   // Opens itself when there is a gap or an unresolved scope question, so the case that matters is not
   // hidden behind an interaction. Otherwise closed: the evidence panes are what a reviewer came for.
   const needsAttention = Boolean(
-    coverage && (coverage.notEvaluated > 0 || coverage.applicabilityReviewRequired > 0),
+    coverage
+      && (coverage.notEvaluated > 0
+        || coverage.applicabilityReviewRequired > 0
+        // An extraction gap is silent otherwise: the comparison reads as COMPLETED and the
+        // requirement produced a finding, so nothing on a collapsed panel would reveal that a
+        // stated obligation was never assessed.
+        || (coverage.extractionReviewRequired ?? 0) > 0),
   );
   const [open, setOpen] = useState(needsAttention);
 
@@ -250,6 +289,10 @@ export function CoveragePanel({ coverage, exempt, inProgress, onRetry, retryingI
           <Chip size="small" color="warning" variant="outlined"
             label={`${coverage.applicabilityReviewRequired} scope unclear`} />
         )}
+        {(coverage.extractionReviewRequired ?? 0) > 0 && (
+          <Chip size="small" color="warning" variant="outlined"
+            label={`${coverage.extractionReviewRequired} extraction review`} />
+        )}
         {coverage.notEvaluated > 0 && (
           <Chip size="small" color="error"
             label={`${coverage.notEvaluated} not evaluated`} />
@@ -269,6 +312,12 @@ export function CoveragePanel({ coverage, exempt, inProgress, onRetry, retryingI
               value={coverage.applicabilityConfirmed} indent />
             <CountRow label="Applicability review required"
               value={coverage.applicabilityReviewRequired} indent emphasis="review" />
+            {/* Only when present. A zero row here would invite the reader to wonder what it means on
+                every comparison, when it applies to a small minority. */}
+            {(coverage.extractionReviewRequired ?? 0) > 0 && (
+              <CountRow label="Extraction review required"
+                value={coverage.extractionReviewRequired ?? 0} indent emphasis="review" />
+            )}
           </Box>
 
           <Box sx={{ mt: 1 }}>

@@ -13,6 +13,7 @@ import com.app.docreview.contracts.requirement.ExtractedRequirement;
 import com.app.docreview.contracts.retrieval.EvidenceCandidate;
 import com.app.docreview.contracts.retrieval.SearchCoverage;
 import com.app.docreview.retrievalcomparison.comparison.aggregation.ClauseAggregator;
+import com.app.docreview.retrievalcomparison.comparison.prompt.ComparisonPrompt;
 import com.app.docreview.retrievalcomparison.comparison.validation.ComparisonOutputValidator;
 import com.app.docreview.retrievalcomparison.llm.ComparisonModelGateway;
 import com.app.docreview.retrievalcomparison.spans.EvidenceSpanReader;
@@ -79,8 +80,18 @@ public class RequirementComparisonService {
         // §18.4: at most one retry. A model that produced invalid output twice with the errors in
         // front of it will not succeed on a third attempt, and an unbounded loop converts one bad
         // response into unbounded spend.
+        // Carries the targeted correction into attempt 2 when attempt 1 failed in the one shape a
+        // generic re-ask cannot fix (§18.4). Null for every other failure, which keeps the ordinary
+        // retry unchanged.
+        String repair = null;
+
         for (int attempt = 1; attempt <= 2; attempt++) {
-            var result = gateway.compare(request);
+            // The plain single-argument call when there is nothing to repair, which is always the
+            // first attempt. Keeps the ordinary path on the ordinary method rather than routing every
+            // comparison through the repair overload with a null.
+            var result = repair == null
+                    ? gateway.compare(request)
+                    : gateway.compare(request, repair);
 
             if (!result.rawResponseValid()) {
                 if (attempt == 2) {
@@ -106,10 +117,47 @@ public class RequirementComparisonService {
                         requirement.requirementId(), problems);
                 return failed(requirement, problems);
             }
-            log.info("Retrying comparison of {} after {} validation problem(s)",
-                    requirement.requirementId(), problems.size());
+            // Failures whose cause is knowable from the response shape get a SPECIFIC correction. A
+            // generic re-ask of a deterministic validation failure returns the same answer, which is
+            // how one run turned 145 requirements into unevaluated controls.
+            repair = repairFor(result.output(), problems);
+
+            log.info("Retrying comparison of {} after {} validation problem(s){}",
+                    requirement.requirementId(), problems.size(),
+                    repair == null ? "" : " with a targeted repair instruction");
         }
         return failed(requirement, List.of("comparison exhausted retries"));
+    }
+
+    /**
+     * The targeted correction for a failure whose cause is knowable, or null. Architecture §18.4.
+     *
+     * <p>Matched on the OUTPUT SHAPE rather than the problem string wherever possible, so rewording a
+     * validator message cannot silently disable a targeted retry and send the case back to burning two
+     * model calls for nothing.
+     *
+     * <p><strong>Why every extraction-limitation failure needs one.</strong> These are DETERMINISTIC:
+     * the model produced a structurally invalid response, and re-asking the identical question produces
+     * it again. In one run 123 of 145 failures were a limitation set with an empty obligation list, all
+     * given the generic retry, all failing twice — 246 model calls that recorded nothing.
+     */
+    private static String repairFor(
+            com.app.docreview.contracts.comparison.ComparisonModelOutput output,
+            List<String> problems) {
+        if (output == null) {
+            return null;
+        }
+
+        // PARTIAL with nothing named as unsatisfied. The only shape whose cause is knowable from the
+        // response itself, so the only one that gets a targeted correction; everything else takes the
+        // ordinary re-ask, which is right for a malformed or transient response.
+        if (output.status() == ComparisonStatus.PARTIAL
+                && (output.unsatisfiedClauseIds() == null
+                    || output.unsatisfiedClauseIds().isEmpty())
+                && problems.stream().anyMatch(p -> p.contains("unsatisfied clause"))) {
+            return ComparisonPrompt.INCOMPLETE_PARTIAL_REPAIR;
+        }
+        return null;
     }
 
     private ComparisonModelRequest buildRequest(String comparisonId, String documentVersionId,
@@ -160,6 +208,7 @@ public class RequirementComparisonService {
                 ? output.status()
                 : aggregator.aggregate(clauseResults, coverage);
 
+
         // For an absence verdict, name the closest passage that WAS considered (§18.6). A gap with no
         // evidence at all is unfalsifiable: the reviewer cannot tell whether the tool looked in the
         // right place.
@@ -209,7 +258,12 @@ public class RequirementComparisonService {
                 applicability.reason(),
                 applicability.decidedBy(),
                 // Null: this is the ORIGINAL run. A retry stamps its own provenance (§19.2).
-                null);
+                null,
+                // No evaluation limitation from the comparison path. A finding produced here was
+                // compared against a requirement whose integrity was already validated at ingestion, so
+                // the limitation cannot arise: it is set only by the deterministic integrity path,
+                // which never invokes the model. Letting the model set it is what made V3 misfire.
+                null, List.of(), true);
     }
 
     /**
@@ -426,7 +480,12 @@ public class RequirementComparisonService {
                     existing.applicabilityStatus(), existing.applicabilityReason(),
                     existing.applicabilityDecidedBy(),
                     // Preserved: merging duplicates must not erase that a finding was retried.
-                    existing.retriedAs()));
+                    existing.retriedAs(),
+                    // Preserved for the same reason: merging duplicate findings must not silently
+                    // restore an extraction-gap result to the alignment conclusion.
+                    existing.evaluationLimitation(),
+                    existing.unmappedStandardObligations(),
+                    existing.conclusionEligible()));
         }
         return List.copyOf(byKey.values());
     }

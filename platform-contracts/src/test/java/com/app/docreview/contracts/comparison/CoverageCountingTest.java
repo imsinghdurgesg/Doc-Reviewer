@@ -124,12 +124,49 @@ class CoverageCountingTest {
         }
 
         @Test
-        @DisplayName("producedVerdict() is a positive test on the two verdict-bearing states")
+        @DisplayName("producedVerdict() is a positive test on the verdict-bearing states")
         void verdictBearingStatesAreExplicit() {
+            // Enumerated rather than negated so adding a state is a DELIBERATE decision here. This
+            // test caught EXTRACTION_REVIEW_REQUIRED when it was introduced, which is the behaviour
+            // wanted: counting a requirement as evaluated when it was not is how a report claims
+            // coverage it does not have.
             for (var state : CoverageState.values()) {
                 boolean expected = state == CoverageState.EVALUATED
-                        || state == CoverageState.UNCERTAIN_APPLICABILITY;
+                        || state == CoverageState.UNCERTAIN_APPLICABILITY
+                        // Compared, cited evidence, produced a reviewable result. Its exclusion from
+                        // the CONCLUSION is a separate question — see conclusionEligible().
+                        || state == CoverageState.EXTRACTION_REVIEW_REQUIRED;
                 assertThat(state.producedVerdict()).as("%s", state).isEqualTo(expected);
+            }
+        }
+
+        @Test
+        @DisplayName("conclusionEligible() is narrower than producedVerdict()")
+        void conclusionEligibilityIsSeparateFromCoverage() {
+            // The distinction the extraction-gap design turns on. An extraction gap was MEASURED, so it
+            // is covered; but a stated obligation went unassessed, so no positive compliance statement
+            // may rest on it. Collapsing the two would either misreport coverage or silently let an
+            // unassessed obligation support a conclusion.
+            assertThat(CoverageState.EXTRACTION_REVIEW_REQUIRED.producedVerdict()).isTrue();
+            assertThat(CoverageState.EXTRACTION_REVIEW_REQUIRED.conclusionEligible()).isFalse();
+
+            for (var state : CoverageState.values()) {
+                if (state.conclusionEligible()) {
+                    assertThat(state.producedVerdict())
+                            .as("%s cannot support a conclusion without a verdict", state)
+                            .isTrue();
+                }
+            }
+        }
+
+        @Test
+        @DisplayName("retryable() is a positive test, so a new state is not offered a pointless retry")
+        void retryableStatesAreExplicit() {
+            // An extraction gap cannot be fixed by another model call — the missing clause is upstream
+            // of the model. Offering Retry spent eight model calls on CHG-08-R2 to reach the same wall.
+            for (var state : CoverageState.values()) {
+                boolean expected = state == CoverageState.FAILED || state == CoverageState.PENDING;
+                assertThat(state.retryable()).as("%s", state).isEqualTo(expected);
             }
         }
     }
