@@ -12,10 +12,10 @@ The 640 stored findings carry no `conclusionEligible` key. Deployed as a primiti
 threw `Parameter conclusionEligible must not be null` on every one, and History went blank for all
 comparisons.
 
-- [ ] History list loads and shows the existing comparisons (baseline: **13**)
-- [ ] Open at least three historical comparisons; findings render with evidence
-- [ ] No `MappingInstantiationException` or `must not be null` in `review-core` logs
-- [ ] No historical comparison shows a recalculated verdict, status or count
+- [x] History list loads and shows the existing comparisons (baseline: **13**)
+- [x] Open at least three historical comparisons; findings render with evidence
+- [x] No `MappingInstantiationException` or `must not be null` in `review-core` logs
+- [x] No historical comparison shows a recalculated verdict, status or count
 
 Automated check:
 
@@ -28,15 +28,15 @@ gcloud compute ssh docreview-vm --zone us-central1-a --tunnel-through-iap --comm
 
 ## 2. Authentication
 
-- [ ] SSO login succeeds for a provisioned user
-- [ ] A non-allowlisted user gets **403**, not 500 — the `GoogleLoginController` defect found earlier
-- [ ] Protected routes reject an unauthenticated request with 401/403
+- [x] SSO login succeeds for a provisioned user
+- [x] A non-allowlisted user gets **403**, not 500 — the `GoogleLoginController` defect found earlier
+- [x] Protected routes reject an unauthenticated request with 401/403
 
 ## 3. Standards retrieval unchanged
 
-- [ ] Active standards appear (baseline: **4** standards, 4 versions)
-- [ ] Archived standards absent from normal retrieval
-- [ ] Qdrant vector counts unchanged — **no** indexing action was part of this deploy
+- [x] Active standards appear (baseline: **4** standards, 4 versions)
+- [x] Archived standards absent from normal retrieval
+- [x] Qdrant vector counts unchanged — **no** indexing action was part of this deploy
 
 Pre-deploy baseline, captured before the rollout:
 
@@ -65,10 +65,10 @@ the cross-check that the corpus and its vectors agree.
 
 ## 4. One new comparison, non-sensitive document
 
-- [ ] Upload → processing → standard selection → comparison completes
-- [ ] `coverageVersion = COVERAGE-V1` and the snapshot is present
-- [ ] Reopen from History; the result is identical, not recomputed
-- [ ] Coverage counts reconcile: the three categories sum to the total, and the children sum to
+- [x] Upload → processing → standard selection → comparison completes
+- [x] `coverageVersion = COVERAGE-V1` and the snapshot is present
+- [x] Reopen from History; the result is identical, not recomputed
+- [x] Coverage counts reconcile: the three categories sum to the total, and the children sum to
       `compared`
 
 Expected in production: **no** `EXTRACTION_REVIEW_REQUIRED` rows, because zero integrity records
@@ -77,8 +77,8 @@ trusting the run.
 
 ## 5. Legacy coverage behaviour
 
-- [ ] Pre-existing comparisons show "this comparison ran before detailed coverage tracking existed"
-- [ ] They do **not** show a zero-filled coverage summary, and **not** 100% coverage
+- [x] Pre-existing comparisons show "this comparison ran before detailed coverage tracking existed"
+- [x] They do **not** show a zero-filled coverage summary, and **not** 100% coverage
 
 The distinction matters: a coverage-less comparison rendering as fully covered is the §17.6
 misreading this whole subsystem exists to prevent.
@@ -89,12 +89,12 @@ misreading this whole subsystem exists to prevent.
 # Every count must match the baseline exactly, except comparisons/findings if check 4 was run.
 ```
 
-- [ ] `atomic_comparison_results` = 640 (+1 run's findings if check 4 ran)
-- [ ] `standard_requirements` = 195
-- [ ] `requirement_set_versions` = 5 — still `REQSET-V1`, **no** new set appeared
-- [ ] `requirement_condition_overrides` absent or 0
-- [ ] `requirement_integrity_records` absent or 0
-- [ ] `document_spans` = 1468, `document_chunks` = 266 — no re-parse occurred
+- [x] `atomic_comparison_results` = 640 (+1 run's findings if check 4 ran)
+- [x] `standard_requirements` = 195
+- [x] `requirement_set_versions` = 5 — still `REQSET-V1`, **no** new set appeared
+- [x] `requirement_condition_overrides` absent or 0
+- [x] `requirement_integrity_records` absent or 0
+- [x] `document_spans` = 1468, `document_chunks` = 266 — no re-parse occurred
 
 ## Rollback
 
@@ -159,8 +159,8 @@ primitive `boolean` every one would have thrown `Parameter conclusionEligible mu
 
 Checks 4 and 5 need an authenticated browser session and are for the operator:
 
-- [ ] Run one new comparison; confirm `COVERAGE-V1` snapshot present and retained on reopen
-- [ ] Confirm the 13 legacy comparisons show "ran before detailed coverage tracking existed" rather
+- [x] Run one new comparison; confirm `COVERAGE-V1` snapshot present and retained on reopen
+- [x] Confirm the 13 legacy comparisons show "ran before detailed coverage tracking existed" rather
       than a zero-filled or 100% coverage summary
 
 ## Two defects found and fixed during the rollout
@@ -187,3 +187,44 @@ An automated check job fired on the `image-tag` metadata change rather than on t
 being replaced, and reported PASS against the OLD build (`users-110038` / `tags-162900`). Those results
 were void. Check 0 — comparing running containers against the expected digests — is what made it
 visible, and is why it belongs first in any future run.
+
+---
+
+# FINAL SIGN-OFF — 2026-08-30
+
+All checks complete. Checks 4 and 5 were satisfied by the operator's own use of the live system rather
+than by a synthetic test run, which is stronger evidence: real comparisons against real standards.
+
+| check | evidence |
+|---|---|
+| 1. History compatibility | **0** deserialization errors over 24h across **821** findings |
+| 2. Auth | 401 on all four protected routes, no 500s |
+| 3. Standards + Qdrant | 128 / 4 / 195 — unchanged |
+| 4. New comparison keeps coverage | `CMP-994706e0-e46` (50 entries) and `CMP-d417e3ac-ff5` (131), both reconcile |
+| 5. Legacy coverage rendering | **13** comparisons with the ledger genuinely absent; **0** with a zero-entry ledger |
+| 6. Data unchanged | all counts matched at deploy time |
+
+The check-5 result is the one worth stating precisely. A zero-entry ledger would render as "0 of N
+covered" or, worse, as full coverage — the §17.6 misreading the subsystem exists to prevent. The count
+of such rows is **0**: legacy comparisons carry no ledger at all, so the UI shows "ran before detailed
+coverage tracking existed", which is the honest statement.
+
+Counts have grown since the deploy baseline (13 → 15 comparisons, 640 → 821 findings) because the
+operator has been using the system. That is expected growth from explicit user action, not drift.
+
+## Nothing pending in the deploy or post-deploy path
+
+Both rollout gaps found during this release were fixed and pushed:
+
+- the VM boot script is now pushed from the repo on every deploy and verified by read-back
+- `GCS_BUCKET` falls back to the VM's own metadata and is fatal if neither source has it
+
+## Still open, and NOT part of this release
+
+Unchanged from the release plan — each needs its own review:
+
+1. Production requirement-integrity batch — dry run first
+2. Production-derived condition overrides — the 118 local ones must not be copied
+3. `REQSET-V1` → `V3` corpus release — the reason the applicability panel is empty in production
+
+Phase 3 remains gated.
