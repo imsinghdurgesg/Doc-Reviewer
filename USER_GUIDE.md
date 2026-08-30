@@ -45,8 +45,18 @@ users.
 If your account is not on the allowlist you get a clear "access denied" message, not an error page. Ask
 an administrator to add you.
 
+<!-- SCREENSHOT: docs/images/roles-denied.png
+     The access-denied screen a non-allowlisted user sees. The point is that it is a plain explanation,
+     not a stack trace or a blank page — capture the whole viewport so that reads clearly. -->
+![Access denied for a user not on the allowlist](docs/images/roles-denied.png)
+
 **You see your own reviews.** History is scoped to the account that ran each review. An administrator
 does not silently see everyone's documents.
+
+<!-- SCREENSHOT: docs/images/history-reviewer-column.png
+     The History list showing the reviewer column, which is what makes the scoping visible. Blur real
+     names and email addresses. -->
+![History, scoped to the signed-in reviewer](docs/images/history-reviewer-column.png)
 
 ---
 
@@ -60,10 +70,25 @@ role.
 **Standards** → add a standard → upload a version. Give it a title, category, and tags; these become the
 chips you filter on later.
 
+<!-- SCREENSHOT: docs/images/admin-new-standard.png
+     The new-standard form with title, category and tags filled in. Capture BEFORE upload so the reader
+     sees what they must supply, not the result. -->
+![Creating a standard](docs/images/admin-new-standard.png)
+
+<!-- SCREENSHOT: docs/images/derived-metadata-chips.png
+     The standards list showing category and tag chips on a saved standard — this is what the metadata
+     is FOR, and the connection is not obvious from the form alone. -->
+![Category and tag chips in the library](docs/images/derived-metadata-chips.png)
+
 ### Option B — Drop it in the cloud bucket
 
 Files placed in the configured Google Cloud Storage bucket are picked up by a sweep that runs every five
 minutes. Useful for bulk loading.
+
+<!-- SCREENSHOT: docs/images/bucket-layout.png
+     The bucket in the GCS console showing where files go. Blur the project/bucket name if it identifies
+     the organisation. -->
+![Bucket layout for drop-in uploads](docs/images/bucket-layout.png)
 
 ### Watching it index
 
@@ -72,6 +97,11 @@ vectors. A large standard takes a few minutes.
 
 The status progresses through parsing → spans → chunks → embeddings → requirement extraction. If it
 stalls, see troubleshooting in Part 9.
+
+<!-- SCREENSHOT: docs/images/indexing-progress.png
+     Indexing mid-run, with the stage visible. A finished one shows nothing about the stages, which is
+     the thing a waiting reader wants to recognise. -->
+![Indexing in progress](docs/images/indexing-progress.png)
 
 > **Do not upload the document you want reviewed as a standard.** The standards library is the
 > authoritative corpus every review is measured against. A process document indexed there would start
@@ -89,6 +119,11 @@ viewer, and split into passages.
 A document is only reviewable once parsing has produced passages. If it has none — an image-only scan,
 for example — the tool says so rather than reviewing it and reporting everything as missing.
 
+<!-- SCREENSHOT: docs/images/upload-document.png
+     The upload panel with one document uploaded and ready. If you can also capture a not-yet-reviewable
+     document alongside, that contrast is worth more than either alone. -->
+![Uploading a document for review](docs/images/upload-document.png)
+
 ### Step 2 — Choose standards
 
 Select one or more standards from the library. You can filter by category and tag.
@@ -100,6 +135,12 @@ the same control three times, and you cannot tell whether that is three problems
 The runner-up is still reported, with its score, so a close call stays visible and you can select it
 explicitly.
 
+<!-- SCREENSHOT: docs/images/select-standard.png
+     Standard selection with the category/tag filter in use. Ideally capture an auto-selection result
+     showing the chosen standard's score AND the reported runner-up, since that pairing is what the
+     surrounding text explains. -->
+![Choosing standards](docs/images/select-standard.png)
+
 **On size:** a review spanning more requirements than the configured limit (500 by default) is **rejected
 up front**, telling you the count. It is not silently truncated — a review that quietly dropped a third of
 its requirements while reporting "completed" is worse than one that refuses.
@@ -110,6 +151,10 @@ Each requirement is retrieved and evaluated separately. Progress shows which sta
 requirements are done.
 
 A few hundred requirements takes several minutes. You can leave the page; the review continues.
+
+<!-- SCREENSHOT: docs/images/comparison-progress.png
+     A review mid-run with the stage and the evaluated/total counter visible. -->
+![Comparison in progress](docs/images/comparison-progress.png)
 
 ### Step 4 — Read the findings
 
@@ -126,10 +171,20 @@ Each finding is one requirement, with:
 **Aligned findings are kept, not hidden.** A list showing only three problems tells you nothing about how
 much was actually checked.
 
+<!-- SCREENSHOT: docs/images/findings-list.png
+     The findings panel with a MIX of verdicts, including at least one PARTIAL so its named unsatisfied
+     clause is visible, and at least one ALIGNED so the "aligned findings are kept" point is evident. -->
+![Findings list](docs/images/findings-list.png)
+
 ### Step 5 — Side-by-side view
 
 Click a finding to see the standard's requirement beside your document, with the cited passages
 highlighted. This is where you verify the tool rather than trust it.
+
+<!-- SCREENSHOT: docs/images/side-by-side.png
+     Requirement on one side, document on the other, with a cited passage highlighted. This image
+     necessarily shows document text — use a document you are willing to publish. -->
+![Side-by-side verification](docs/images/side-by-side.png)
 
 ### Step 6 — Read the coverage panel
 
@@ -158,6 +213,12 @@ the whole.
 
 If the numbers ever do not add up, the panel says so rather than showing figures you would reasonably
 trust.
+
+<!-- SCREENSHOT: docs/images/coverage-panel.png
+     The coverage panel EXPANDED, showing the indented subsets beneath "Compared". A collapsed panel
+     misses the entire point of the layout. If you have a review with a non-zero "Extraction review
+     required" or "Applicability review required" line, use that one. -->
+![Coverage panel](docs/images/coverage-panel.png)
 
 ---
 
@@ -189,11 +250,22 @@ There is no Retry button on these, deliberately. The missing clause comes from e
 the comparison, so another attempt would reach the same wall. Report it to an administrator; the fix is
 a corrected extraction of the standard.
 
+<!-- SCREENSHOT: docs/images/extraction-review-entry.png
+     A coverage entry expanded on "Requirement extraction needs review", showing the quoted obligation
+     and the explanation that re-evaluating will not help. Note the deliberate ABSENCE of a Retry
+     button — that absence is the point, so frame it so a reader can see no button is offered. -->
+![Extraction review required](docs/images/extraction-review-entry.png)
+
 ### Retry and Rerun
 
 - **Retry** re-evaluates a single failed requirement in place. The amended finding is stamped with the
   prompt and model versions it ran under, so a reader can see it was produced separately.
 - **Rerun** creates a new review with the same document and standards, leaving the original intact.
+
+<!-- SCREENSHOT: docs/images/partial-review-notice.png
+     A partially completed review: the top notice naming the shortfall, with the coverage entries and a
+     Retry button on a genuinely failed requirement. -->
+![Partial review with retry available](docs/images/partial-review-notice.png)
 
 ---
 
@@ -210,6 +282,12 @@ back to some default provider would send your documents somewhere you did not ch
 
 The key is **encrypted at rest** and never returned to the browser; the UI only shows whether one is set.
 
+<!-- SCREENSHOT: docs/images/admin-ai-matching.png
+     The AI & matching tab: provider, server URL, key state, model aliases, and the three instruction
+     boxes. MASK the key field — the app never displays a stored key, but a screenshot taken mid-entry
+     would. -->
+![AI and matching settings](docs/images/admin-ai-matching.png)
+
 There are also three optional **instruction boxes** to steer how the AI judges compliance, splits
 requirements, and describes standards. They are *appended* to the built-in rules, which always win — an
 administrator with a text box cannot remove the rules that make a finding citable.
@@ -225,6 +303,11 @@ administrator with a text box cannot remove the rules that make a finding citabl
 At least one administrator must exist or nobody can manage users; the system logs loudly at startup if
 the allowlist has no admin.
 
+<!-- SCREENSHOT: docs/images/admin-users.png
+     The users panel with a mix of roles assigned, so the nesting described above is visible. Blur real
+     email addresses. -->
+![Users and roles](docs/images/admin-users.png)
+
 ### 3. Standards library
 
 **Admin → Standards library**: add, upload, activate, archive.
@@ -232,6 +315,11 @@ the allowlist has no admin.
 **Archive rather than delete** a superseded version. Reviews that already ran against it keep pointing at
 it, and deleting it would leave those results citing a standard that no longer exists. An archived
 version stops appearing in normal retrieval but remains readable for historical reviews.
+
+<!-- SCREENSHOT: docs/images/admin-standards-library.png
+     The library with at least one ARCHIVED version visible alongside active ones, since the archive-vs-
+     delete distinction is what the text argues for. -->
+![Standards library](docs/images/admin-standards-library.png)
 
 ### 4. Cloud sync — optional
 
@@ -244,6 +332,11 @@ version stops appearing in normal retrieval but remains readable for historical 
 Deliberately not editable. These carry the rules that make findings checkable — that a verdict must cite
 evidence that exists, that "partially satisfied" must name which clause falls short. Editing them freely
 would produce responses that fail validation rather than merely read differently.
+
+<!-- SCREENSHOT: docs/images/admin-prompts.png
+     The Prompts tab with one prompt expanded and its version chip visible. The version is the part that
+     matters for auditability, so do not crop it out. -->
+![Prompts, read-only](docs/images/admin-prompts.png)
 
 ---
 
@@ -275,10 +368,21 @@ that mattered.
 Reviewed decisions are stored as an **overlay**, not by rewriting the extraction. Reopening an old review
 shows the decision that was in force when it ran, not today's.
 
+<!-- SCREENSHOT: docs/images/admin-condition-governance.png
+     The condition governance panel showing extracted role, reviewed role, and provenance on the same
+     row. If a row exists where the reviewer DISAGREED with the extractor, use it — that disagreement is
+     the whole reason the panel exists. -->
+![Condition governance](docs/images/admin-condition-governance.png)
+
 ### Policy owner queue
 
 **Admin → Policy owner queue**: conditions nobody has resolved yet, grouped so the same open question
 across several standards appears once rather than as several small problems.
+
+<!-- SCREENSHOT: docs/images/admin-policy-owner-queue.png
+     The queue with at least one grouped entry, so the grouping across standards is visible rather than
+     just asserted. -->
+![Policy owner queue](docs/images/admin-policy-owner-queue.png)
 
 ---
 
@@ -400,3 +504,44 @@ Two things to check before capturing:
 
 Until the files exist the links render as broken placeholders. That is intentional — a visible gap gets
 filled, whereas a commented-out link is forgotten.
+
+### Capture list
+
+Twenty images, in the order they appear. Each has a comment above it in the text saying what to frame
+and **why** — the *why* matters more than the framing, because a screenshot that misses the point it
+illustrates is worse than none at all.
+
+| # | file | part |
+|---|---|---|
+| 1 | `roles-denied.png` | 1 — access denied is an explanation, not an error page |
+| 2 | `history-reviewer-column.png` | 1 — reviewer column, showing scoping |
+| 3 | `admin-new-standard.png` | 2 — the form, captured *before* upload |
+| 4 | `derived-metadata-chips.png` | 2 — what the metadata is for |
+| 5 | `bucket-layout.png` | 2 — drop-in upload location |
+| 6 | `indexing-progress.png` | 2 — mid-run, stage visible |
+| 7 | `upload-document.png` | 3 — a document ready to review |
+| 8 | `select-standard.png` | 3 — auto-selection score **and** runner-up |
+| 9 | `comparison-progress.png` | 3 — stage plus evaluated/total |
+| 10 | `findings-list.png` | 3 — a *mix* of verdicts |
+| 11 | `side-by-side.png` | 3 — cited passage highlighted |
+| 12 | `coverage-panel.png` | 3 — **expanded**, showing the indented subsets |
+| 13 | `extraction-review-entry.png` | 4 — note the deliberate absence of a Retry button |
+| 14 | `partial-review-notice.png` | 4 — Retry offered on a genuinely failed requirement |
+| 15 | `admin-ai-matching.png` | 5 — **mask the key field** |
+| 16 | `admin-users.png` | 5 — mixed roles, blur addresses |
+| 17 | `admin-standards-library.png` | 5 — include an archived version |
+| 18 | `admin-prompts.png` | 5 — keep the version chip in frame |
+| 19 | `admin-condition-governance.png` | 6 — ideally a row where the reviewer disagreed |
+| 20 | `admin-policy-owner-queue.png` | 6 — a grouped entry |
+
+Four are worth extra care because the wrong crop inverts the meaning:
+
+- **12** — a *collapsed* coverage panel misses the entire point of the layout.
+- **13** — frame it so the reader can see **no Retry button is offered**; that absence is the point.
+- **15** — mask the key field.
+- **8** — the score-plus-runner-up pairing is what the surrounding text explains; either alone does not
+  illustrate it.
+
+Note that **13** and **19** need data that production does not currently have — an extraction-review
+entry, and a reviewed condition. Capture those locally, or defer them until the corpus re-extraction
+lands.
