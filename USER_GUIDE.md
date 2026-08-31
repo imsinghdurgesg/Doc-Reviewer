@@ -438,155 +438,128 @@ across several standards appears once rather than as several small problems.
 
 ---
 
-### Walkthrough — reviewing conditions on a newly uploaded standard
+### Walkthrough — reviewing conditions on a standard
 
-The end-to-end procedure. Steps 1–4 are read-only and safe; step 5 writes, and step 6 is the only one
-that can remove a requirement from a review.
+You do this in the browser. Open **Standards**, find the version you want, and click
+**Update applicability** on its row.
+
+<!-- SCREENSHOT: docs/images/applicability-row-link.png
+     A standards-library version row with the "Update applicability" link visible beside Activate.
+     Capture a row where the link is present; it only appears once a version is INDEXED. -->
+![Update applicability on a version row](docs/images/applicability-row-link.png)
+
+The action is **per version**, because a condition decision belongs to one extraction of one version.
+It appears only once the version is indexed — before that there are no requirements, so no conditions.
 
 #### Step 1 — Upload and index the standard
 
-Part 2. Wait for requirement extraction to finish. Conditions are extracted alongside requirements, so
-there is nothing to review until indexing completes.
+Part 2. Conditions are extracted alongside requirements, so there is nothing to review until indexing
+finishes. If the dialog says the version has no requirement set yet, that is what it means.
 
-#### Step 2 — Open the condition list
+#### Step 2 — Read what the tool guessed
 
-**Admin → Condition governance** → select the standard version. Each row is one condition found on one
-requirement:
+Each condition shows as one block: the requirement it belongs to, the condition wording verbatim, and
+a chip saying **"the tool guessed: …"**.
 
-| column | meaning |
-|---|---|
-| Requirement | which requirement states the condition |
-| Condition text | the wording, verbatim from the standard |
-| **Extracted role** | what the model classified it as |
-| **Reviewed role** | what a human confirmed — blank until reviewed |
-| Provenance | which review batch decided it, if any |
+Treat that guess as a draft to challenge. **The tool over-predicts scope limits heavily** — in one
+reviewed corpus it proposed 117 and a human confirmed **none of them**. Correcting it is most of the
+work on this screen.
 
-<!-- SCREENSHOT: docs/images/condition-list-unreviewed.png
-     The condition list for a freshly indexed standard: extracted roles populated, reviewed roles all
-     blank. This "before" state is what makes the review work visible; a fully-reviewed list does not
-     show that anything needed doing. -->
-![Conditions awaiting review](docs/images/condition-list-unreviewed.png)
+<!-- SCREENSHOT: docs/images/applicability-dialog.png
+     The dialog open on a standard with several conditions: the summary chips, the guidance paragraph,
+     and at least one condition block with its dropdown. Ideally a version where the tool's guess is
+     wrong, since correcting it is the point. -->
+![Applicability dialog](docs/images/applicability-dialog.png)
 
-#### Step 3 — Classify each condition
+#### Step 3 — Say what each condition actually does
 
-For each row, decide what the condition actually does:
+Pick from the dropdown. Each option asks a question rather than naming a category:
 
-| role | meaning | can it exclude? |
+| option | example | can it cause a skip? |
 |---|---|---|
-| **SCOPE_GATE** | Genuinely limits which documents the requirement governs | **Yes**, if separately authorised |
-| **CONDITIONAL_OBLIGATION** | Describes *when* the duty triggers, not who it covers | No |
-| **IMPLEMENTATION_QUALIFIER** | Describes *how* to satisfy it | No |
-| **EXCEPTION_OR_WAIVER** | A carve-out from an otherwise applicable duty | No |
-| **TEMPORAL_OR_SEQUENCE** | Timing or ordering | No |
-| **UNKNOWN** | You cannot decide — routes to the policy owner queue | No |
+| **It limits WHO the rule applies to** | "for cloud-hosted systems" | **Yes**, if you allow it in step 4 |
+| **It says WHEN the rule kicks in** | "when a change is urgent" | No |
+| **It says HOW to meet the rule** | "using the approved template" | No |
+| **It is an exception to the rule** | "unless the CISO has granted a waiver" | No |
+| **It is a deadline or an order of steps** | "within two business days" | No |
+| **I am not sure** | — | No. Routes to the policy owner queue |
 
-**The distinction that matters.** *"For cloud-hosted systems"* is a scope gate — it says which systems
-the rule covers. *"When a change is urgent"* is a conditional obligation — the rule still covers you, it
-just fires under certain circumstances.
+**The distinction the whole screen turns on.** *"For cloud-hosted systems"* limits **who** the rule
+applies to. *"When a change is urgent"* only says **when** it kicks in — the rule still applies.
+Marking the second as a limit would quietly excuse a real requirement, which is the failure this
+screen exists to prevent.
 
-Treating the second as a scope gate would silently excuse a real requirement. Expect the model to
-over-predict SCOPE_GATE; in one reviewed corpus it proposed 117 scope gates and human review confirmed
-**zero**. Correcting it is the main work of this step.
+A **reason is required** on any change. It is saved with your name, and it is what a reader sees months
+later when they ask why a requirement was skipped.
 
-#### Step 4 — Record your decisions in a CSV
+#### Step 4 — Only if you chose "limits WHO"
 
-One row per condition. Columns:
+A second question appears:
 
-```csv
-standard_version_id,requirement_set,requirement_id,condition_text,predicted_role,reviewer_role,reviewer_exclusion,reviewer_notes
-```
+> **Should we stop checking this requirement for documents outside that scope?**
 
-| column | what to put |
+This is the only control in the product that can make a requirement vanish from a review, so it is a
+**separate decision** from step 3. You may be certain a condition is a scope limit and still want a
+person to confirm before the tool starts skipping controls.
+
+<!-- SCREENSHOT: docs/images/applicability-exclusion-prompt.png
+     The warning block that appears after choosing "It limits WHO the rule applies to", with the
+     question, the explanation, and the "Yes, allow skipping" button. This is the highest-consequence
+     control in the product, so capture the whole block including the text under the button. -->
+![Allowing a requirement to be skipped](docs/images/applicability-exclusion-prompt.png)
+
+**Leave it alone if you are unsure.** The requirement then stays in every review and the condition
+appears as context. That is the safer outcome: a requirement you review and dismiss yourself costs a
+minute, one the tool skipped by mistake is a gap nobody sees.
+
+Even with it on, a requirement is skipped only when **all** of these hold:
+
+1. you classified the condition as limiting who the rule applies to;
+2. you allowed skipping;
+3. the requirement names **specific** document types, not "all systems";
+4. the review ran with a **Document type** that clearly falls outside that scope (Part 3, Step 2).
+
+Miss any one and the review reports **"Applicability review required"** — a visible question for a
+person, never a silent skip.
+
+#### Step 5 — Save, then rerun
+
+Click **Save decision**. It takes effect for **new** reviews; existing ones are frozen and keep the
+decisions in force when they ran (Part 8).
+
+Rerun with a **Document type** set, then check the coverage panel:
+
+| where it appears | meaning |
 |---|---|
-| `standard_version_id` | the version you reviewed |
-| `requirement_set` | the requirement set version, e.g. `REQSET-V3` |
-| `requirement_id` | the requirement |
-| `condition_text` | the condition, verbatim |
-| `predicted_role` | what the model said |
-| `reviewer_role` | **your** decision, from the table above |
-| `reviewer_exclusion` | leave blank, or `AUTHORISE_EXCLUSION` — see step 6 |
-| `reviewer_notes` | why. This is what a future reader sees |
+| **Not applicable** | skipped, with your reason |
+| **Applicability review required** | the scope question is still open |
 
-What each `reviewer_role` value does:
+#### Changing your mind
 
-| value | result |
-|---|---|
-| a specific role | Recorded as **confirmed** with that role |
-| `UNKNOWN` | Routed to the **policy owner queue**; cannot exclude |
-| **blank** | **No row written.** The model's guess stands, unreviewed and unable to exclude |
+Every decision is **editable as often as you like**. Reclassify a condition, add or withdraw the
+skip permission, or reword the reason — each save restamps who decided and when.
 
-Blank is a safe default, not an omission — an unreviewed condition can never exclude anything.
+One safeguard worth knowing: if you reclassify a condition away from "limits WHO", the skip
+permission is **withdrawn automatically** in the same edit. Otherwise a requirement would go on being
+skipped on the strength of a classification that no longer exists.
 
-#### Step 5 — Import as a dry run first
+#### Bulk review with a spreadsheet
 
-```bash
-infrastructure/scripts/import-condition-overrides.py reviewed.csv \
-  --batch CONDROLE-REVIEW-V1
-```
+For a large standard, `infrastructure/scripts/import-condition-overrides.py` imports many decisions
+from a CSV in one go. It refuses the whole file if any row is malformed, and defaults to a dry run.
 
-Without `--apply` nothing is written; it prints the batch and a summary. **The importer refuses the
-whole file if any row is malformed** — a half-applied review would leave some requirements governed and
-others not, with nothing on screen to say which.
+Editing a CSV-imported decision in the browser is allowed. When you do, the stored record stops naming
+the source file: it would otherwise point at a spreadsheet whose contents no longer match the decision,
+and a stale reference is more misleading than none. Who decided and when are still recorded.
 
-Check the summary, especially the authorised-to-exclude count. Then:
+#### Who can do this
 
-```bash
-infrastructure/scripts/import-condition-overrides.py reviewed.csv \
-  --batch CONDROLE-REVIEW-V1 --apply
-```
+**Standards admins and admins.** Deciding what a standard's conditions mean is curation of the
+standards library — the authority a standards admin already holds.
 
-#### Step 6 — Authorising an exclusion
-
-This is the only action that removes a requirement from a review, so it takes **two independent
-decisions** rather than one.
-
-Put `AUTHORISE_EXCLUSION` in `reviewer_exclusion`. It is accepted only when the same row is a
-**confirmed SCOPE_GATE**. Anything else is rejected with the line number.
-
-```csv
-...,SCOPE_GATE,AUTHORISE_EXCLUSION,"Standard covers cloud systems only; confirmed with the policy owner"
-```
-
-Why two decisions rather than one:
-
-> Confirming *what a clause does* is not the same as authorising it to *remove a control from a review*.
-> A reviewer may be certain a condition is a scope gate and still want a person to decide whether acting
-> on it is appropriate.
-
-The token is spelled out in full deliberately. A truthy `yes`, `y` or `1` would let a stray spreadsheet
-cell grant a control-removing power by accident.
-
-Even then, exclusion needs all four of:
-
-1. the condition is a **confirmed SCOPE_GATE**;
-2. exclusion is **explicitly authorised**;
-3. the requirement's scope names **specific document types**, not "all";
-4. the review ran with a **Document type** that clearly conflicts (Part 3, Step 2).
-
-Miss any one and the result is **"applicability review required"** — a visible question, never a silent
-exclusion.
-
-<!-- SCREENSHOT: docs/images/condition-list-reviewed.png
-     The same list after import: reviewed roles populated, provenance showing the batch id, and ideally
-     one row where the reviewer DISAGREED with the extracted role. That disagreement is the whole reason
-     this workflow exists. -->
-![Conditions after review](docs/images/condition-list-reviewed.png)
-
-#### Step 7 — Rerun and confirm
-
-Reruns are needed: existing reviews are frozen and keep the decisions in force when they ran (Part 8).
-
-Rerun with a **Document type** set, then check the coverage panel. A correctly excluded requirement
-appears under **Not applicable** with your reason; an unresolved one appears under **Applicability
-review required**.
-
-> **The panel is read-only.** Decisions are recorded by the importer, not edited in the browser. That is
-> deliberate: an exclusion needs a reviewed CSV with an author, notes and a batch id behind it, so a
-> control removed from a review can always be traced to a person and a rationale.
-
----
-
----
+**Admin → Applicability** remains available as a read-only view across every standard, which is where
+to answer "how many requirements can be skipped anywhere?" The per-version dialog is where you work;
+that tab is where you audit.
 
 ## Part 7 — What this version does not do
 
@@ -724,7 +697,7 @@ filled, whereas a commented-out link is forgotten.
 
 ### Capture list
 
-Twenty-four images, in the order they appear. Each has a comment above it in the text saying what to frame
+Twenty-five images, in the order they appear. Each has a comment above it in the text saying what to frame
 and **why** — the *why* matters more than the framing, because a screenshot that misses the point it
 illustrates is worse than none at all.
 
@@ -752,8 +725,9 @@ illustrates is worse than none at all.
 | 18 | `admin-prompts.png` | 5 — keep the version chip in frame |
 | 19 | `admin-condition-governance.png` | 6 — ideally a row where the reviewer disagreed |
 | 20 | `admin-policy-owner-queue.png` | 6 — a grouped entry |
-| 21 | `condition-list-unreviewed.png` | 6 — the *before* state, reviewed roles blank |
-| 22 | `condition-list-reviewed.png` | 6 — *after*, with provenance and a disagreement |
+| 21 | `applicability-row-link.png` | 6 — the per-version link on a library row |
+| 22 | `applicability-dialog.png` | 6 — the dialog, ideally where the tool guessed wrong |
+| 23 | `applicability-exclusion-prompt.png` | 6 — **the highest-consequence control**; include the text under the button |
 
 Four are worth extra care because the wrong crop inverts the meaning:
 
