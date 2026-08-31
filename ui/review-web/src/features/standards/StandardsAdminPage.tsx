@@ -29,6 +29,7 @@ import { toQuery, type PageResponse } from "@/models/page";
 import { PageControls } from "@/components/pagination/PageControls";
 import { useDebounced } from "@/hooks/useDebounced";
 import { overlineLabel, palette } from "@/app/theme";
+import { ApplicabilityDialog } from "@/features/standards/ApplicabilityDialog";
 
 /**
  * Standards repository administration. Architecture §8.1, §20.1, §33.
@@ -73,6 +74,9 @@ export function StandardsAdminPage({ embedded = false }: { embedded?: boolean } 
    * whole ranking path inert, so this form is how the signals get populated at all.
    */
   const [metadataTarget, setMetadataTarget] = useState<StandardSummary | null>(null);
+  /** The version whose applicability conditions are open for review, or null. */
+  const [applicabilityTarget, setApplicabilityTarget] =
+    useState<{ versionId: string; title: string; label: string } | null>(null);
   const [metadataForm, setMetadataForm] = useState({
     businessUnit: "", category: "", standardFamily: "", documentType: "", tags: "",
   });
@@ -444,6 +448,24 @@ export function StandardsAdminPage({ embedded = false }: { embedded?: boolean } 
                         Activate
                       </Button>
                     )}
+                    {/*
+                      Applicability is reviewed PER VERSION, because a condition decision belongs to one
+                      extraction of one version. Offered once the version is indexed: before that there
+                      are no requirements, so no conditions to review.
+                    */}
+                    {version.indexingState === "INDEXED" && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() => setApplicabilityTarget({
+                          versionId: version.id,
+                          title: standard.title,
+                          label: `v${version.version}`,
+                        })}
+                      >
+                        Update applicability
+                      </Button>
+                    )}
                     {version.comparable && (
                       <Chip size="small" color="success" label="ready for reviews" />
                     )}
@@ -733,6 +755,17 @@ export function StandardsAdminPage({ embedded = false }: { embedded?: boolean } 
           <Button onClick={() => { setUploadTarget(null); setPendingFile(null); }}>Close</Button>
         </DialogActions>
       </Dialog>
+
+      {applicabilityTarget && (
+        <ApplicabilityDialog
+          open
+          onClose={() => setApplicabilityTarget(null)}
+          standardVersionId={applicabilityTarget.versionId}
+          standardTitle={applicabilityTarget.title}
+          versionLabel={applicabilityTarget.label}
+          readOnly={readOnly}
+        />
+      )}
 
       {result && rows.length > 0 && (
         <Box sx={{ mt: 2 }}>

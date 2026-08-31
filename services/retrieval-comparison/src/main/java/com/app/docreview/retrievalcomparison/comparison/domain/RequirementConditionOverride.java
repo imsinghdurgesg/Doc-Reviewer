@@ -124,6 +124,52 @@ public class RequirementConditionOverride {
     }
 
     /**
+     * Revises this review decision. Architecture §12.5.
+     *
+     * <p><strong>The single place a review decision changes.</strong> The CSV importer and the Admin UI
+     * both come through here, so the exclusion rule cannot hold on one path and not the other — and a
+     * third caller added later inherits it rather than reimplementing it.
+     *
+     * <p>Exclusion authority is recomputed from the incoming status, never carried over. A condition
+     * confirmed as a scope gate and authorised to exclude, later reclassified to
+     * CONDITIONAL_OBLIGATION, must lose that authority in the same edit: leaving it set would keep a
+     * control excluded on the strength of a classification that no longer exists.
+     *
+     * <p>Every revision restamps actor, timestamp and batch. An amended decision with the original
+     * author's name on it would misattribute the change, which matters most for the one field that can
+     * remove a control from a review.
+     *
+     * @param authoriseExclusion the reviewer's explicit opt-in; honoured only for a CONFIRMED SCOPE_GATE
+     */
+    public void revise(ConditionRole reviewedRole, ConditionReviewStatus reviewStatus,
+                       boolean authoriseExclusion, String reviewerNotes,
+                       String reviewedBy, String reviewBatchId) {
+        this.reviewedRole = reviewedRole;
+        this.reviewStatus = reviewStatus;
+        // FILE PROVENANCE IS CLEARED, not kept.
+        //
+        // These name the spreadsheet a decision came from, with its hash, so a reader can prove which
+        // file produced it. Revising through the UI makes that pairing false: the row would still name
+        // condrole-review-v1.csv while no longer matching any line in it. A stale file reference is a
+        // worse lie than an absent one — it invites verification that will disagree.
+        //
+        // The audit trail survives in the fields that are restamped below: who decided, when, and under
+        // which batch. What is lost is only the claim that a file supports it, which is exactly the
+        // claim that stopped being true.
+        this.sourceFileName = null;
+        this.sourceSha256 = null;
+        // BOTH conditions, recomputed. Confirming what a clause does is not the same as authorising it
+        // to remove a control, so the caller's opt-in is necessary but never sufficient.
+        this.canDriveNotApplicable = authoriseExclusion
+                && reviewStatus == ConditionReviewStatus.CONFIRMED
+                && reviewedRole == ConditionRole.SCOPE_GATE;
+        this.reviewerNotes = reviewerNotes;
+        this.reviewedBy = reviewedBy;
+        this.reviewedAt = Instant.now();
+        this.reviewBatchId = reviewBatchId;
+    }
+
+    /**
      * The role this override contributes, or UNKNOWN when it settles nothing.
      *
      * <p>NEEDS_POLICY_OWNER and REJECTED both yield UNKNOWN: a reviewer who looked and could not decide

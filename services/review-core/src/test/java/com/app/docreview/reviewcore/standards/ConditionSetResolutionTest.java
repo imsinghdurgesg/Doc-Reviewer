@@ -36,8 +36,10 @@ class ConditionSetResolutionTest {
     private static final String VERSION = "6a8d6f379b065e2acc9ad5e1";
 
     private final ConditionGovernanceClient client = mock(ConditionGovernanceClient.class);
+    // CurrentUser is null: these tests exercise the READ path, which never touches the actor. A mock
+    // would suggest the identity mattered here, and it does not — only the review write records it.
     private final StandardAdminController controller =
-            new StandardAdminController(null, client);
+            new StandardAdminController(null, client, null);
 
     private static ConditionGovernanceClient.ConditionRow row() {
         return new ConditionGovernanceClient.ConditionRow(

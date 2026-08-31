@@ -14,6 +14,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.app.docreview.reviewcore.security.CurrentUser;
+import com.app.docreview.reviewcore.shared.error.ApiException;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -49,6 +52,8 @@ public class StandardAdminController {
 
     private final StandardAdminService service;
     private final ConditionGovernanceClient conditionGovernance;
+    /** The actor recorded on a review decision; never taken from the request body. */
+    private final CurrentUser currentUser;
 
     /**
      * Applicability conditions for one requirement set, with extracted role, governed role and
@@ -89,6 +94,64 @@ public class StandardAdminController {
                 current.requirementSetVersion(),
                 current.requirementExtractionPromptVersion(),
                 conditionGovernance.conditions(standardVersionId, current.requirementSetVersion()));
+    }
+
+    /**
+     * Records one condition's review decision. Architecture §12.5.
+     *
+     * <p>Available to STANDARDS_ADMIN as well as ADMIN. Deciding what a standard's conditions MEAN is
+     * curation of the standards library, which is exactly the authority a standards admin holds; it is
+     * not the separate authority to decide who may read the organisation's reviews.
+     *
+     * <p>The requirement set is resolved HERE rather than accepted from the browser, for the same
+     * reason as the read above: a client carrying its own set version carries one that goes stale on
+     * every re-extraction, and the failure would be silent — a decision written against a set nothing
+     * compares against.
+     *
+     * <p>The actor comes from the authenticated principal, never from the request body. A reviewer
+     * identity a caller could set is not an audit trail, and this is the field that says who authorised
+     * removing a control from a review.
+     */
+    @PostMapping("/versions/{standardVersionId}/conditions/review")
+    @PreAuthorize("hasAnyRole('STANDARDS_ADMIN','ADMIN')")
+    public ResponseEntity<ConditionGovernanceClient.ConditionRow> reviewCondition(
+            @PathVariable String standardVersionId,
+            @RequestBody ConditionReviewBody body) {
+
+        var current = conditionGovernance.currentSet(standardVersionId);
+        if (current == null || current.requirementSetVersion() == null) {
+            // No published set means there is nothing to review yet. A 409 rather than a 404: the
+            // standard exists, its conditions do not, and the two need different fixes.
+            throw ApiException.conflict("NO_REQUIREMENT_SET",
+                    "This standard version has no published requirement set yet, so it states no "
+                            + "conditions to review. Wait for indexing to finish.");
+        }
+        var saved = conditionGovernance.reviewCondition(
+                standardVersionId, current.requirementSetVersion(),
+                body.requirementId(), body.conditionText(),
+                body.reviewedRole(), body.reviewStatus(),
+                body.authoriseExclusion(), body.reviewerNotes(),
+                currentUser.id());
+        return saved == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(saved);
+    }
+
+    /**
+     * One reviewer decision, as the browser sends it.
+     *
+     * <p>Deliberately carries NO reviewer identity and NO requirement set version — both are supplied
+     * server-side. A body that could name its own author would make the provenance unfalsifiable.
+     *
+     * @param authoriseExclusion the explicit opt-in to let this condition remove a requirement from a
+     *                           review. Honoured only for a CONFIRMED SCOPE_GATE; the domain recomputes
+     *                           it rather than trusting this flag.
+     */
+    public record ConditionReviewBody(
+            String requirementId,
+            String conditionText,
+            String reviewedRole,
+            String reviewStatus,
+            boolean authoriseExclusion,
+            String reviewerNotes) {
     }
 
     /**

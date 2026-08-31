@@ -124,6 +124,38 @@ public class ConditionGovernanceClient {
     }
 
     /**
+     * Records one condition's review decision in the worker. Architecture §12.5.
+     *
+     * <p><strong>Throws on failure, unlike the reads in this class.</strong> Those return empty so a
+     * down worker still renders a usable admin page. A write cannot do that: silently swallowing the
+     * error would tell an administrator their decision was saved when it was not — and for the field
+     * that authorises removing a control from a review, a false confirmation is the worst outcome
+     * available.
+     */
+    public ConditionRow reviewCondition(String standardVersionId, String requirementSetVersion,
+                                        String requirementId, String conditionText,
+                                        String reviewedRole, String reviewStatus,
+                                        boolean authoriseExclusion, String reviewerNotes,
+                                        String reviewedBy) {
+        var body = new java.util.HashMap<String, Object>();
+        body.put("requirementId", requirementId);
+        body.put("conditionText", conditionText);
+        body.put("reviewedRole", reviewedRole);
+        body.put("reviewStatus", reviewStatus);
+        body.put("authoriseExclusion", authoriseExclusion);
+        body.put("reviewerNotes", reviewerNotes);
+        body.put("reviewedBy", reviewedBy);
+
+        return retrievalComparison.post()
+                .uri("/internal/requirements/sets/{standardVersionId}/{requirementSetVersion}"
+                                + "/conditions/review",
+                        standardVersionId, requirementSetVersion)
+                .body(body)
+                .retrieve()
+                .body(ConditionRow.class);
+    }
+
+    /**
      * Reads the conditions for one requirement set.
      *
      * <p>Returns empty on failure rather than throwing. This is an inspection panel: a worker that is
