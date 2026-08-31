@@ -178,20 +178,31 @@ column of open questions.
 
 ### Step 3 — Choose standards
 
-Select one or more standards from the library. You can filter by category and tag.
-
-**If you select none**, the tool picks the single best-matching standard for you and tells you which, with
-its score. One, not several: selecting three standards that all derive from a common framework produces
-the same control three times, and you cannot tell whether that is three problems or one.
-
-The runner-up is still reported, with its score, so a close call stays visible and you can select it
-explicitly.
+The tool recommends what to compare against, based on the context from step 2. You confirm or change it.
 
 <!-- SCREENSHOT: docs/images/select-standard.png
-     Standard selection with the category/tag filter in use. Ideally capture an auto-selection result
-     showing the chosen standard's score AND the reported runner-up, since that pairing is what the
-     surrounding text explains. -->
+     The recommendation panel: the recommended standard checked, the "Other standards considered"
+     expander, and the "Choose from the full library instead" link — all three, because the point is
+     that the ranked answer comes first and the alternatives are one click away rather than competing
+     for attention. -->
 ![Choosing standards](docs/images/select-standard.png)
+
+**What you see, in order:**
+
+1. **Recommended** — normally one standard, already ticked. Each row shows its key, department,
+   document type and tags, so you can tell at a glance whether it is the right body of rules.
+2. **Other standards considered (N)** — a collapsed list of what the tool looked at and **the reason it
+   set each one aside**. Worth opening if a standard you expected is missing; it tells you the standard
+   was seen, and why it was not used.
+3. **Choose from the full library instead (N)** — collapsed. Every indexed standard, for the case where
+   the right answer was never a candidate at all.
+
+**One recommendation, not several.** Selecting three standards that all derive from a common framework
+produces the same control three times, and you cannot tell whether that is three problems or one. So the
+tool proposes the single best match and leaves the rest one click away.
+
+**You are not limited to the recommendation.** Tick anything you like from either collapsed list. The
+recommendation is a ranking, not a gate — if you know a standard applies, select it.
 
 **On size:** a review spanning more requirements than the configured limit (500 by default) is **rejected
 up front**, telling you the count. It is not silently truncated — a review that quietly dropped a third of
@@ -624,7 +635,8 @@ identifiers, and the text you see is fetched from the stored document. It cannot
 | "Extraction review required" | A platform-side extraction gap. Retrying will not help; report it |
 | Standard uploaded but no requirements | Indexing may still be running, or the file parsed to no usable text |
 | Lots of "applicability review required" rows | **Document type** was left blank. Set it and rerun — see Part 3 Step 2 |
-| Wrong standard recommended | Add context before selecting. Department and document type change the ranking |
+| Wrong standard recommended | Add context before selecting (Part 3, Step 2). If it is still wrong, open **Other standards considered** — it says why each was set aside |
+| A standard is missing from the list | Open **Other standards considered** first; if it is not there either, use **Choose from the full library instead**. A standard must be active and indexed to appear |
 | Cannot sign in | Not on the allowlist. Ask an administrator |
 | A standard has vanished from selection | Likely archived. Archived versions stay readable in old reviews |
 
