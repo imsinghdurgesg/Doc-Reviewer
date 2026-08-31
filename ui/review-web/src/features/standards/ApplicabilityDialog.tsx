@@ -326,7 +326,20 @@ export function ApplicabilityDialog({
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle sx={{ pb: 0.5 }}>
         <Typography sx={{ fontSize: 15, fontWeight: 600 }}>Applicability conditions</Typography>
-        <Typography sx={{ fontSize: 12.5, color: palette.muted }}>
+        {/*
+          ONE LINE SAYING WHAT THIS SCREEN DOES, before any of the detail.
+
+          Without it the dialog opened on a list of conditions and dropdowns, and a reader had to infer
+          the purpose from the controls. The two outcomes are what a reader needs to hold in mind while
+          working: a requirement can be left out of reviews entirely, or kept but treated as applying
+          only in certain circumstances. Everything below is choosing between those.
+        */}
+        <Typography sx={{ fontSize: 12.5, color: "#3d4a44", mt: 0.5 }}>
+          Decide, for each condition this standard states, whether it means a requirement should be
+          <strong> left out of a review altogether</strong>, or simply
+          <strong> applies only under certain circumstances</strong>.
+        </Typography>
+        <Typography sx={{ fontSize: 12.5, color: palette.muted, mt: 0.5 }}>
           {standardTitle} · {versionLabel}
           {setVersion && ` · ${setVersion}`}
         </Typography>

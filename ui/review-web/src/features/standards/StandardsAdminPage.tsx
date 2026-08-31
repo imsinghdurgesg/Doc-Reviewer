@@ -454,17 +454,19 @@ export function StandardsAdminPage({ embedded = false }: { embedded?: boolean } 
                       are no requirements, so no conditions to review.
                     */}
                     {version.indexingState === "INDEXED" && (
-                      <Button
-                        size="small"
-                        variant="text"
-                        onClick={() => setApplicabilityTarget({
-                          versionId: version.id,
-                          title: standard.title,
-                          label: `v${version.version}`,
-                        })}
-                      >
-                        Update applicability
-                      </Button>
+                      <Tooltip title="Decide whether each condition means a requirement should be left out of a review altogether, or applies only under certain circumstances.">
+                        <Button
+                          size="small"
+                          variant="text"
+                          onClick={() => setApplicabilityTarget({
+                            versionId: version.id,
+                            title: standard.title,
+                            label: `v${version.version}`,
+                          })}
+                        >
+                          Update applicability
+                        </Button>
+                      </Tooltip>
                     )}
                     {version.comparable && (
                       <Chip size="small" color="success" label="ready for reviews" />
