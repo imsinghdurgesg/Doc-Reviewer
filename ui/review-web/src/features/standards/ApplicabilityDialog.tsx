@@ -22,6 +22,12 @@ import { overlineLabel, palette } from "@/app/theme";
  *
  * The one control-removing power keeps all four of its guards. Authorising exclusion is accepted only on
  * a confirmed scope gate, and the server recomputes that rather than trusting this form.
+ *
+ * <strong>Wording is deliberately non-technical.</strong> The domain terms — scope gate, conditional
+ * obligation, exclusion authority — are precise and mean nothing to a reader who has not been told what
+ * they mean. Every label here asks a question in ordinary words instead, and the one control that can
+ * remove a requirement from a review states its effect before the button rather than after it. The
+ * stored values are unchanged; only what a person reads is.
  */
 
 /** Mirrors StandardAdminController.ConditionsResponse. */
@@ -45,48 +51,63 @@ interface ConditionRow {
 }
 
 /**
- * The roles, with the plain-English gloss that decides the classification.
+ * The roles, phrased as what a reader would say rather than what the system calls them.
  *
- * Only SCOPE_GATE can exclude, and the model over-predicts it heavily — in one reviewed corpus it
- * proposed 117 and review confirmed none. So the descriptions lead with the distinction that matters:
- * does the condition say WHO the rule covers, or WHEN it fires?
+ * Only SCOPE_GATE can lead to a skipped requirement, and the model over-predicts it heavily — in one
+ * reviewed corpus it proposed 117 and review confirmed none. So each option leads with the question it
+ * answers, and every one carries a worked example: the WHO-versus-WHEN distinction is the judgement the
+ * whole screen turns on, and an abstract label does not help anyone make it.
  */
 const ROLES: ReadonlyArray<{ value: string; label: string; hint: string }> = [
   {
     value: "SCOPE_GATE",
-    label: "Scope gate",
-    hint: "Limits WHICH documents the rule covers — the only role that can exclude a requirement",
+    label: "It limits WHO the rule applies to",
+    hint: "e.g. \"for cloud-hosted systems\" — the rule does not cover other kinds of document",
   },
   {
     value: "CONDITIONAL_OBLIGATION",
-    label: "Conditional obligation",
-    hint: "Says WHEN the duty triggers. The rule still covers this document",
+    label: "It says WHEN the rule kicks in",
+    hint: "e.g. \"when a change is urgent\" — the rule still applies here, it just fires sometimes",
   },
   {
     value: "IMPLEMENTATION_QUALIFIER",
-    label: "Implementation qualifier",
-    hint: "Describes HOW to satisfy the requirement",
+    label: "It says HOW to meet the rule",
+    hint: "e.g. \"using the approved template\" — detail about compliance, not about who is covered",
   },
   {
     value: "EXCEPTION_OR_WAIVER",
-    label: "Exception or waiver",
-    hint: "A carve-out from an otherwise applicable duty",
+    label: "It is an exception to the rule",
+    hint: "e.g. \"unless the CISO has granted a waiver\" — a carve-out from a rule that does apply",
   },
   {
     value: "TEMPORAL_OR_SEQUENCE",
-    label: "Timing or sequence",
-    hint: "A deadline or an ordering constraint",
+    label: "It is a deadline or an order of steps",
+    hint: "e.g. \"within two business days\", \"before deployment\"",
   },
   {
     value: "UNKNOWN",
-    label: "Cannot decide — send to policy owner",
-    hint: "Records the question as open rather than guessing. Cannot exclude",
+    label: "I am not sure — pass it to someone who decides policy",
+    hint: "Records it as an open question instead of guessing. Nothing gets skipped",
   },
 ];
 
-const ROLE_LABEL: Record<string, string> = Object.fromEntries(
-  ROLES.map((r) => [r.value, r.label]),
-);
+/**
+ * Short labels for the chips, where the sentence-style options above would not fit.
+ *
+ * Kept separate from the dropdown text rather than reused: a chip has room for a name and a dropdown
+ * option has room for an explanation, and forcing one string to serve both made the dropdown
+ * unreadable to anyone who did not already know the vocabulary.
+ */
+const ROLE_CHIP: Record<string, string> = {
+  SCOPE_GATE: "limits who it applies to",
+  CONDITIONAL_OBLIGATION: "says when it kicks in",
+  IMPLEMENTATION_QUALIFIER: "says how to comply",
+  EXCEPTION_OR_WAIVER: "an exception",
+  TEMPORAL_OR_SEQUENCE: "a deadline or ordering",
+  UNKNOWN: "undecided",
+};
+
+
 
 interface Draft {
   reviewedRole: string;
@@ -150,12 +171,12 @@ function ConditionEditor({
       <Stack direction="row" spacing={1} sx={{ mb: 0.75, alignItems: "center", flexWrap: "wrap" }}>
         <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{row.requirementId}</Typography>
         <Chip size="small" variant="outlined"
-          label={`model: ${ROLE_LABEL[row.extractedRole] ?? row.extractedRole}`} />
+          label={`the tool guessed: ${ROLE_CHIP[row.extractedRole] ?? row.extractedRole}`} />
         {row.reclassified && (
-          <Chip size="small" color="warning" variant="outlined" label="reclassified by review" />
+          <Chip size="small" color="warning" variant="outlined" label="a person changed this" />
         )}
         {row.canDriveNotApplicable && (
-          <Chip size="small" color="error" label="may exclude a requirement" />
+          <Chip size="small" color="error" label="can skip this requirement" />
         )}
         {row.overrideBatchId && (
           <Chip size="small" variant="outlined" label={row.overrideBatchId}
@@ -169,7 +190,7 @@ function ConditionEditor({
 
       <Stack direction="row" spacing={1.5} sx={{ mb: 1, flexWrap: "wrap", rowGap: 1.5 }}>
         <TextField
-          select size="small" label="What this condition does" sx={{ minWidth: 300 }}
+          select size="small" label="What does this condition do?" sx={{ minWidth: 300 }}
           value={draft.reviewedRole}
           disabled={readOnly || save.isPending}
           onChange={(event) => {
@@ -197,7 +218,7 @@ function ConditionEditor({
 
       <TextField
         size="small" fullWidth multiline minRows={2}
-        label="Why — recorded with your name against this decision"
+        label="Why did you decide that? Saved with your name"
         value={draft.reviewerNotes}
         disabled={readOnly || save.isPending}
         error={changed && noteMissing}
@@ -210,12 +231,24 @@ function ConditionEditor({
         sx={{ mb: 1 }}
       />
 
+      {/*
+        PLAIN LANGUAGE, deliberately. This is the only control in the product that can make a
+        requirement vanish from a review, so the person clicking it has to understand the consequence
+        without knowing the vocabulary. "Authorise this condition to exclude a requirement" described
+        the mechanism correctly and told a reader nothing about what would happen to their reviews.
+
+        Phrased as the question it actually asks — should we stop checking this? — with the effect
+        stated before the button rather than after it.
+      */}
       {canOfferExclusion && (
         <Alert severity="warning" sx={{ mb: 1, py: 0.25 }}>
           <Typography sx={{ fontSize: 12.5, mb: 0.5 }}>
-            <strong>Authorise this condition to exclude a requirement?</strong> Confirming what a clause
-            does is not the same as authorising it to remove a control from a review, so this is a
-            separate decision.
+            <strong>Should we stop checking this requirement for documents outside that scope?</strong>
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: "#3d4a44", mb: 0.75 }}>
+            You said this condition limits which documents the rule covers. Saying yes here lets the
+            tool skip this requirement entirely when a document falls outside it — the requirement
+            will not appear in those reviews at all.
           </Typography>
           <Button
             size="small"
@@ -224,12 +257,20 @@ function ConditionEditor({
             disabled={readOnly || save.isPending}
             onClick={() => setDraft((d) => ({ ...d, authoriseExclusion: !d.authoriseExclusion }))}
           >
-            {draft.authoriseExclusion ? "Authorised — click to withdraw" : "Authorise exclusion"}
+            {draft.authoriseExclusion
+              ? "Yes — skipping is allowed. Click to undo"
+              : "Yes, allow skipping"}
           </Button>
+          <Typography sx={{ fontSize: 11.5, color: palette.muted, mt: 0.75 }}>
+            Leave this alone if you are unsure. The requirement then stays in every review and this
+            condition simply appears as context — which is the safer outcome, because a requirement you
+            review and dismiss yourself costs a minute, and one the tool skipped by mistake is a gap
+            nobody sees.
+          </Typography>
           <Typography sx={{ fontSize: 11.5, color: palette.muted, mt: 0.5 }}>
-            Even authorised, a requirement is excluded only when the review runs with a document type
-            that clearly conflicts with the stated scope. Otherwise it is reported as an open
-            applicability question, never silently dropped.
+            Even with this on, a requirement is only skipped when the reviewer set a document type that
+            clearly falls outside the stated scope. Otherwise the review flags it as an open question
+            for a person, rather than dropping it quietly.
           </Typography>
         </Alert>
       )}
@@ -335,26 +376,27 @@ export function ApplicabilityDialog({
           <>
             <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: "wrap" }}>
               <Chip size="small" variant="outlined" label={`${rows.length} conditions`} />
-              <Chip size="small" variant="outlined" label={`${summary.gates} scope gates`} />
+              <Chip size="small" variant="outlined" label={`${summary.gates} limit who the rule applies to`} />
               <Chip
                 size="small"
                 color={summary.canExclude > 0 ? "error" : "default"}
                 variant={summary.canExclude > 0 ? "filled" : "outlined"}
-                label={`${summary.canExclude} may exclude a requirement`}
+                label={`${summary.canExclude} allowed to skip a requirement`}
               />
               {summary.open > 0 && (
                 <Chip size="small" color="warning" variant="outlined"
-                  label={`${summary.open} open questions`} />
+                  label={`${summary.open} awaiting a decision`} />
               )}
             </Stack>
 
             <Typography sx={{ ...overlineLabel, fontSize: 9, mb: 0.5 }}>
-              Only a scope gate can exclude a requirement
+              The one distinction that matters
             </Typography>
             <Typography sx={{ fontSize: 12, color: palette.muted, mb: 1 }}>
-              Expect the model to over-predict scope gates. “For cloud-hosted systems” limits who the
-              rule covers; “when a change is urgent” only says when it fires — treating the second as a
-              scope gate would silently excuse a real requirement.
+              “For cloud-hosted systems” limits <strong>who</strong> the rule applies to. “When a change
+              is urgent” only says <strong>when</strong> it kicks in — the rule still applies. The tool
+              often confuses the two, and marking the second as a limit would quietly excuse a real
+              requirement. Correcting that is most of the work here.
             </Typography>
 
             <Divider />
