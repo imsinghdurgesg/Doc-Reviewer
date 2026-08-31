@@ -215,16 +215,67 @@ export const CanonicalHtmlViewer = forwardRef<HTMLDivElement, CanonicalHtmlViewe
       for (const item of evidence) {
         let resolved = resolveHighlight(item, nodesById);
 
-        // A span citing a suppressed cell resolves to a node that is not on screen, so nothing would
-        // be marked. Re-resolve it against the row that contains it: the row's character range spans
-        // its cells, so the same absolute offsets land on the same words.
-        if (resolved && !rendered.has(resolved.nodeId)) {
-          const containing = visibleNodes.find(
+        // A span citing a suppressed node resolves to something not on screen, so nothing would be
+        // marked. Two shapes need recovering, and only the first was handled:
+        //
+        //   CELL  — narrower than a row. The row that CONTAINS it covers the same characters, so the
+        //           span's offsets land on the same words inside it.
+        //   TABLE — WIDER than a row. Nothing contains it, so the containment search below found no
+        //           node and the highlight was dropped. A requirement extracted from a whole table
+        //           therefore highlighted nothing at all, while its finding cited a span that existed,
+        //           carried geometry, and resolved perfectly on the server. Observed on ITSM-CHG-001,
+        //           whose four requirements all cite one TABLE node.
+        //
+        // For a TABLE the rows it spans are the visible replacement, so the highlight goes on every
+        // row overlapping its range rather than on one node.
+        // Keyed off the span's OWN parent, not off `resolved`. resolveHighlight returns null whenever
+        // the range does not select exactly the span's text, which a suppressed TABLE frequently fails:
+        // the row level joins cells with a pipe, so the table's text and the span's differ by
+        // separators even though both cover the same characters. Guarding on `resolved` therefore
+        // skipped recovery in precisely the case that needed it.
+        const parent = item.parentNodeId ? nodesById.get(item.parentNodeId) : undefined;
+        const parentSuppressed = Boolean(parent && !rendered.has(parent.nodeId));
+
+        if (parentSuppressed) {
+          const suppressed = parent;
+          const spanStart = item.charStart;
+          const spanEnd = item.charEnd;
+
+          const overlapping =
+            spanStart == null || spanEnd == null
+              ? []
+              : visibleNodes.filter(
+                  (node) =>
+                    node.charStart >= 0
+                    && node.charStart < spanEnd
+                    && node.charStart + node.text.length > spanStart,
+                );
+
+          if (suppressed && suppressed.nodeType === "TABLE" && overlapping.length > 0) {
+            // Every row the table's span covers, clipped to that row's own text. Recorded directly
+            // rather than through resolveHighlight, which resolves ONE node by id and cannot express
+            // a range spanning several.
+            for (const row of overlapping) {
+              const start = Math.max(0, spanStart! - row.charStart);
+              const end = Math.min(row.text.length, spanEnd! - row.charStart);
+              if (end <= start) {
+                continue;
+              }
+              const existingRow = map.get(row.nodeId);
+              map.set(row.nodeId, {
+                start: existingRow ? Math.min(existingRow.start, start) : start,
+                end: existingRow ? Math.max(existingRow.end, end) : end,
+              });
+            }
+            continue;
+          }
+
+          // A cell: re-measure against the single visible node containing its start.
+          const containing = overlapping.find(
             (node) =>
-              node.charStart >= 0 &&
-              item.charStart != null &&
-              item.charStart >= node.charStart &&
-              item.charStart < node.charStart + node.text.length,
+              spanStart != null
+              && spanStart >= node.charStart
+              && spanStart < node.charStart + node.text.length,
           );
           // Keyed by the span's own parentNodeId, because that is what resolveHighlight looks up —
           // the value is the row we want it measured against.

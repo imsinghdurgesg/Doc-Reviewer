@@ -309,3 +309,93 @@ describe("CanonicalHtmlViewer", () => {
     expect(screen.getByText(/produced no readable text/)).toBeInTheDocument();
   });
 });
+
+describe("a span citing a whole table", () => {
+  /**
+   * The defect this pins, observed on ITSM-CHG-001 in a live comparison.
+   *
+   * The DOCX parser emits a table three times over — TABLE, TABLE_ROW, TABLE_CELL — all covering the
+   * same characters, so the viewer suppresses TABLE and TABLE_CELL for display. The recovery path for a
+   * suppressed node searched for a visible node CONTAINING the span, which works for a cell and cannot
+   * work for a table: a table is wider than any row, so nothing contains it and the highlight was
+   * dropped silently.
+   *
+   * Four requirements cited one TABLE node. Every link in the chain was sound — the span existed,
+   * carried geometry, resolved on the server — and the standard pane highlighted nothing, which reads
+   * as a broken finding rather than a display gap.
+   */
+  const TABLE_NODES: CanonicalNodeView[] = [
+    {
+      nodeId: "t-table",
+      nodeType: "TABLE",
+      sectionPath: ["1. Purpose"],
+      page: 1, paragraph: 0, ordinal: 0,
+      text: "Purpose | Governs change. Scope | All systems.",
+      textHash: "sha256:t", charStart: 0, charEnd: 45,
+    },
+    {
+      nodeId: "t-row-1",
+      nodeType: "TABLE_ROW",
+      sectionPath: ["1. Purpose"],
+      page: 1, paragraph: 1, ordinal: 1,
+      text: "Purpose | Governs change.",
+      textHash: "sha256:r1", charStart: 0, charEnd: 25,
+    },
+    {
+      nodeId: "t-row-2",
+      nodeType: "TABLE_ROW",
+      sectionPath: ["1. Purpose"],
+      page: 1, paragraph: 2, ordinal: 2,
+      text: "Scope | All systems.",
+      textHash: "sha256:r2", charStart: 26, charEnd: 46,
+    },
+  ];
+
+  const TABLE_DOC: CanonicalDocumentView = {
+    documentVersionId: "DOC-T", title: "Governance Standard",
+    contentHash: "sha256:t", pages: 1, nodes: TABLE_NODES,
+  };
+
+  it("highlights the rows the table covers, rather than nothing", () => {
+    render(
+      <CanonicalHtmlViewer
+        document={TABLE_DOC}
+        evidence={[evidence({
+          spanId: "SPAN-T",
+          parentNodeId: "t-table",
+          text: "Purpose | Governs change. Scope | All systems.",
+          charStart: 0,
+          charEnd: 45,
+        })]}
+        findingId="F-1"
+        title="Standard"
+        subtitle="the requirement"
+        zoom={1}
+        role="standard"
+      />,
+    );
+
+    // The suppressed TABLE is not rendered, so the mark has to appear on the ROWS instead. Asserting
+    // on marks rather than on text: the text renders either way, and rendering it unhighlighted is
+    // exactly the failure.
+    const marks = document.querySelectorAll("mark");
+    expect(marks.length).toBeGreaterThan(0);
+  });
+
+  it("does not render the suppressed table level twice", () => {
+    render(
+      <CanonicalHtmlViewer
+        document={TABLE_DOC}
+        evidence={[]}
+        findingId={null}
+        title="Standard"
+        subtitle="the requirement"
+        zoom={1}
+        role="standard"
+      />,
+    );
+    // The dedup that created the problem must still hold: one occurrence per row, not the table text
+    // repeated at three levels.
+    expect(screen.getAllByText(/Governs change/).length).toBe(1);
+  });
+});
