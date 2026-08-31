@@ -8,7 +8,9 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
+  Collapse,
   FormControlLabel,
+  Link,
   LinearProgress,
   Paper,
   Stack,
@@ -60,6 +62,11 @@ export function UploadPage() {
 
   const [document, setDocument] = useState<UploadedDocumentSummary | null>(null);
   const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
+  /**
+   * Whether the full library is expanded. Closed by default: the recommendations are the answer, and
+   * this is the escape hatch for a standard the scores never surfaced.
+   */
+  const [showAllStandards, setShowAllStandards] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Drag-over state, for the dropzone tint. */
   const [dragging, setDragging] = useState(false);
@@ -307,15 +314,38 @@ export function UploadPage() {
         />
       )}
 
-      <Typography sx={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.4px", mb: 1.5 }}>
-        All standards
-      </Typography>
-      <Typography sx={{ fontSize: 13, color: palette.muted, mb: 1.5 }}>
-        Browse the full library if the standard you need was not recommended above.
-      </Typography>
+      {/*
+        THE FULL LIBRARY IS COLLAPSED, not removed.
+
+        It used to render as an "All standards" heading with a checkbox per version, immediately below
+        the ranked recommendations — two lists offering the same choice, the second one unordered and as
+        long as the library. A reviewer reading down the page met the recommendation, then a wall of
+        equally-weighted options, which invites picking several and undoes the point of ranking them.
+
+        Kept as an escape hatch because recommendation is a ranking, not a gate: a reviewer may know a
+        standard applies when the scores did not surface it, and §15.1 requires that to stay one click
+        away. Behind a link rather than in front of one: the recommendations already expose everything
+        that was considered and why it was set aside, so this is for the case where the right answer was
+        never a candidate at all.
+      */}
+      {comparableVersions.length > 0 && (
+        <Link
+          component="button"
+          type="button"
+          onClick={() => setShowAllStandards((open) => !open)}
+          sx={{ fontSize: 13, textDecoration: "none", display: "block", mb: 1.5 }}
+        >
+          {showAllStandards
+            ? "Hide the full library"
+            : `Choose from the full library instead (${comparableVersions.length})`}
+        </Link>
+      )}
 
       {standards.isLoading && <CircularProgress size={20} />}
 
+      {/* The empty state is NOT collapsed: "no standards are ready" is the reason the page looks
+          broken, and hiding it behind a link the reviewer has no reason to click would leave them with
+          an apparently empty screen and no explanation. */}
       {!standards.isLoading && comparableVersions.length === 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>
           {/* An unindexed standard has no requirements, so comparing against it yields no findings
@@ -325,6 +355,7 @@ export function UploadPage() {
         </Alert>
       )}
 
+      <Collapse in={showAllStandards}>
       <Stack sx={{ mb: 3, borderTop: 1, borderColor: "divider" }}>
         {comparableVersions.map(({ standard, version }) => (
           <FormControlLabel
@@ -355,6 +386,7 @@ export function UploadPage() {
           />
         ))}
       </Stack>
+      </Collapse>
 
       {/* A running total while selecting, so the limit is never a surprise on submit. Shown only once
           something is selected — a count of zero teaches nothing. */}
