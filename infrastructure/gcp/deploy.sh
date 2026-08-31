@@ -18,7 +18,56 @@ REPO="${REGION}-docker.pkg.dev/${PROJECT}/docreview"
 # fact, which matters for a tool whose results have to be explainable weeks later (§19.2).
 TAG="${TAG:-$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d-%H%M%S)}"
 
+# Which services to rebuild. Default is all four.
+#
+# A one-file UI change still cost a full cycle: reactor build, four images, four pushes. So ONLY=
+# narrows it, and the digests for everything else are inherited from a previous release rather than
+# omitted — compose.gcp.yaml requires one per service and refuses to start without it, so a partial
+# manifest is not a smaller release, it is an undeployable one.
+#
+#   ONLY=review-web TAG=v1.0.0-pilot.6 ./infrastructure/gcp/deploy.sh
+#   ONLY="review-core review-web" ...
+#
+# INHERIT_FROM names the release to copy the untouched digests from. Defaults to whatever the VM is
+# currently running, which is the only safe default: inheriting from an arbitrary older release would
+# roll those services BACKWARDS while appearing to deploy forwards.
+ONLY="${ONLY:-}"
+ALL_SERVICES="review-core document-processing retrieval-comparison review-web"
+INHERIT_FROM="${INHERIT_FROM:-}"
+
 log() { echo "[deploy] $*"; }
+
+# Whether $1 is being rebuilt this run.
+building() {
+  [ -z "$ONLY" ] && return 0
+  for s in $ONLY; do [ "$s" = "$1" ] && return 0; done
+  return 1
+}
+
+if [ -n "$ONLY" ]; then
+  # Validated against the real list: a typo would otherwise build nothing, inherit every digest, and
+  # report a successful release that changed not one thing.
+  for s in $ONLY; do
+    case " $ALL_SERVICES " in
+      *" $s "*) ;;
+      *) log "FATAL: ONLY names '$s', which is not one of: $ALL_SERVICES"; exit 1 ;;
+    esac
+  done
+  if [ -z "$INHERIT_FROM" ]; then
+    INHERIT_FROM=$(gcloud compute instances describe "$VM_NAME" --zone="${REGION}-a" \
+      --project="$PROJECT" \
+      --format='value(metadata.items.filter("key:image-tag").extract("value"))' 2>/dev/null \
+      | tr -d "[]'" || true)
+  fi
+  if [ -z "$INHERIT_FROM" ] || [ ! -f "releases/$INHERIT_FROM/image-digests.env" ]; then
+    log "FATAL: ONLY=$ONLY needs digests for the services it is NOT building, and"
+    log "  releases/${INHERIT_FROM:-<unset>}/image-digests.env does not exist."
+    log "  Set INHERIT_FROM to a release whose manifest is present, or run a full deploy."
+    exit 1
+  fi
+  log "building only: $ONLY"
+  log "inheriting other digests from $INHERIT_FROM"
+fi
 
 log "authenticating docker to $REGION-docker.pkg.dev"
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
@@ -30,24 +79,35 @@ gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 # release before any image is built; twice in one day a release was lost to
 # "failed to respond" and "Premature end of Content-Length" on unrelated artifacts. The script
 # classifies the failure, so a compile error still fails immediately rather than being repeated.
-log "building the reactor"
-./infrastructure/build/mvn-package-retry.sh . -q -DskipTests
+# Skipped when no Java service is being rebuilt: review-web is a webpack build that never reads the
+# reactor output, so running it would add minutes to a UI-only release for nothing.
+if building review-core || building document-processing || building retrieval-comparison; then
+  log "building the reactor"
+  ./infrastructure/build/mvn-package-retry.sh . -q -DskipTests
+else
+  log "no Java service in this build; skipping the reactor"
+fi
 
 # linux/amd64 explicitly. A build on an Apple-silicon machine otherwise produces arm64 images that
 # the VM cannot run, and the failure is an exec-format error rather than anything about architecture.
 PLATFORM=linux/amd64
 
 for svc in review-core document-processing retrieval-comparison; do
+  building "$svc" || { log "skipping $svc"; continue; }
   log "building $svc"
   docker build --platform "$PLATFORM" \
     -f "services/$svc/Dockerfile" \
     -t "$REPO/$svc:$TAG" .
 done
 
-log "building review-web"
-docker build --platform "$PLATFORM" \
-  -f ui/review-web/Dockerfile \
-  -t "$REPO/review-web:$TAG" ui/review-web
+if building review-web; then
+  log "building review-web"
+  docker build --platform "$PLATFORM" \
+    -f ui/review-web/Dockerfile \
+    -t "$REPO/review-web:$TAG" ui/review-web
+else
+  log "skipping review-web"
+fi
 
 # Retried, and a permanent failure is FATAL.
 #
@@ -56,6 +116,7 @@ docker build --platform "$PLATFORM" \
 # some images and not others; without the `exit` the script printed its success banner anyway, and the
 # VM then booted and pulled a tag that only existed for one of four services.
 for svc in review-core document-processing retrieval-comparison review-web; do
+  building "$svc" || continue
   pushed=false
   for attempt in 1 2 3 4; do
     log "pushing $svc:$TAG (attempt $attempt)"
@@ -95,18 +156,34 @@ MANIFEST="$RELEASE_DIR/image-digests.env"
 
 log "resolving pushed digests"
 for svc in review-core document-processing retrieval-comparison review-web; do
-  # From the REGISTRY, not from the local image. `docker inspect` reports RepoDigests only for images
-  # it has pulled or pushed, and a stale local entry from a previous push would name the wrong bytes.
-  digest=$(gcloud artifacts docker images describe "$REPO/$svc:$TAG" \
-    --project="$PROJECT" --format='value(image_summary.digest)' 2>/dev/null || true)
-  if [ -z "$digest" ]; then
-    log "FATAL: no digest for $svc:$TAG. The overlay pins by digest, so the deploy cannot proceed"
-    log "  without it — a missing digest must fail here rather than at boot on the VM."
-    exit 1
-  fi
   var="DOCREVIEW_$(echo "$svc" | tr 'a-z-' 'A-Z_')_DIGEST"
-  echo "$var=$digest" >> "$MANIFEST"
-  log "  $svc  $digest"
+
+  if building "$svc"; then
+    # From the REGISTRY, not from the local image. `docker inspect` reports RepoDigests only for images
+    # it has pulled or pushed, and a stale local entry from a previous push would name the wrong bytes.
+    digest=$(gcloud artifacts docker images describe "$REPO/$svc:$TAG" \
+      --project="$PROJECT" --format='value(image_summary.digest)' 2>/dev/null || true)
+    if [ -z "$digest" ]; then
+      log "FATAL: no digest for $svc:$TAG. The overlay pins by digest, so the deploy cannot proceed"
+      log "  without it — a missing digest must fail here rather than at boot on the VM."
+      exit 1
+    fi
+    echo "$var=$digest" >> "$MANIFEST"
+    log "  $svc  $digest"
+  else
+    # INHERITED, not omitted. compose.gcp.yaml marks every digest required, so leaving one out does not
+    # produce a smaller release — it produces one the VM refuses to start, with an error naming compose
+    # rather than this decision.
+    digest=$(grep -E "^${var}=sha256:[0-9a-f]{64}$" "releases/$INHERIT_FROM/image-digests.env" \
+      | cut -d= -f2 || true)
+    if [ -z "$digest" ]; then
+      log "FATAL: $svc was not built and releases/$INHERIT_FROM/image-digests.env has no $var."
+      log "  Nothing can supply that digest, so the release would not start. Run a full deploy."
+      exit 1
+    fi
+    echo "$var=$digest" >> "$MANIFEST"
+    log "  $svc  $digest  (inherited from $INHERIT_FROM)"
+  fi
 done
 
 # The topology travels with the images. Uploaded here rather than baked into an image so a compose

@@ -1,10 +1,8 @@
 # Document review platform — user and administrator guide
 
-Applies to **v1.0.0-pilot.3**.
-
-This guide covers both audiences. Part 1–4 are for anyone reviewing a document; Part 5–9 are for
-administrators. Part 10 explains the vocabulary the tool uses, which is worth reading once even if you
-only review documents — several words mean something narrower here than in ordinary speech.
+This guide covers both audiences. **Parts 1–4** are for anyone reviewing a document; **Parts 5–6** are
+for administrators. **Part 9** explains the vocabulary, which is worth reading once even if you only
+review documents — several words mean something narrower here than in ordinary speech.
 
 ---
 
@@ -96,7 +94,7 @@ Indexing extracts the standard's requirements, splits each into atomic clauses, 
 vectors. A large standard takes a few minutes.
 
 The status progresses through parsing → spans → chunks → embeddings → requirement extraction. If it
-stalls, see troubleshooting in Part 9.
+stalls, see troubleshooting in Part 8.
 
 <!-- SCREENSHOT: docs/images/indexing-progress.png
      Indexing mid-run, with the stage visible. A finished one shows nothing about the stages, which is
@@ -225,7 +223,7 @@ Each finding is one requirement, with:
 
 | | |
 |---|---|
-| **Status** | the verdict — see Part 10 |
+| **Status** | the verdict — see Part 9 |
 | **Requirement** | what the standard demands, and the clauses it breaks into |
 | **Evidence** | the passages in *your* document the verdict rests on |
 | **Reason** | why the tool reached that verdict |
@@ -536,7 +534,7 @@ person, never a silent skip.
 #### Step 5 — Save, then rerun
 
 Click **Save decision**. It takes effect for **new** reviews; existing ones are frozen and keep the
-decisions in force when they ran (Part 8).
+decisions in force when they ran (Part 7).
 
 Rerun with a **Document type** set, then check the coverage panel:
 
@@ -563,6 +561,21 @@ Editing a CSV-imported decision in the browser is allowed. When you do, the stor
 the source file: it would otherwise point at a spreadsheet whose contents no longer match the decision,
 and a stale reference is more misleading than none. Who decided and when are still recorded.
 
+#### If the dialog shows no conditions
+
+Two things must both be true before there is anything to review:
+
+1. **The standard finished indexing.** Conditions are extracted with the requirements.
+2. **The standard was indexed by a build that records conditions.** Older standards have none stored,
+   so every requirement simply applies.
+
+If a standard clearly states conditions and the dialog shows none, it is almost certainly the second
+reason. Re-uploading does not fix it on its own — ask an administrator to re-index the standard.
+
+Separately: even a fully reviewed standard produces no applicability outcomes unless reviewers set a
+**Document type** when running the review (Part 3, Step 2). Without it there is nothing to compare a
+requirement's scope against.
+
 #### Who can do this
 
 **Standards admins and admins.** Deciding what a standard's conditions mean is curation of the
@@ -572,58 +585,28 @@ standards library — the authority a standards admin already holds.
 to answer "how many requirements can be skipped anywhere?" The per-version dialog is where you work;
 that tab is where you audit.
 
-## Part 7 — What this version does not do
+## Part 7 — Things worth knowing
 
-Stated plainly, so you do not go looking:
-
-| | |
-|---|---|
-| **Agentic retrieval (Phase 3)** | Disabled |
-| **Automatic standard selection** | Available, but limited to one standard |
-| **Shadow extraction sets** | Evaluated internally, never used in your reviews |
-| **Overall compliance score** | Not produced, by design |
-
-### Applicability review needs two things present
-
-The applicability column stays empty unless **both** hold:
-
-1. **You set a Document type** when running the review (Part 3, Step 2). Without it there is nothing to
-   compare a requirement's scope against.
-2. **The standard was indexed by a build that records applicability conditions.** Standards indexed by
-   earlier builds have no condition data stored, so every requirement reads as simply applying.
-
-If your environment shows an empty applicability panel and no scope questions anywhere, check the second
-condition with an administrator before assuming the feature is broken — it is the more likely cause, and
-re-uploading the standard does not fix it on its own.
-
-### Known limitation in this release
-
-Some requirements in the current standards corpus may have an obligation — usually a deadline — that
-extraction failed to capture. Those surface as **"Extraction review required"** and are excluded from the
-conclusion rather than guessed at.
-
-A corrected extraction is planned as a separate, reviewed change. Until then the behaviour is honest
-about the gap rather than hiding it.
-
----
-
-## Part 8 — Things worth knowing
-
-**Reviews are frozen.** A completed review records the prompt version, model, and governance decisions
-that produced it. Reopening it months later shows what it concluded then — not a re-run under today's
-settings. That is what makes a result auditable.
+**Reviews are frozen.** A completed review records the settings and decisions that produced it.
+Reopening it months later shows what it concluded then — not a re-run under today's configuration. That
+is what makes a result auditable.
 
 **Re-uploading the same file does nothing.** Content is hashed; an identical file is recognised rather
 than re-indexed.
 
-**Document content is never logged.** Diagnostics record counts and identifiers only.
+**Your document content is never logged.** Diagnostics record counts and identifiers only.
 
-**Evidence is loaded from storage, never from the model's response.** The AI returns passage
-identifiers, and the text you see is fetched from the stored document. It cannot invent a quotation.
+**Evidence comes from storage, not from the model.** The AI returns passage identifiers, and the text
+you see is fetched from your stored document. It cannot invent a quotation.
 
----
+**One recommended standard, not several.** Comparing against three standards derived from a common
+framework produces the same control three times, and you cannot tell whether that is three problems or
+one. Anything else in the library is still one click away.
 
-## Part 9 — Troubleshooting
+**No overall score.** The tool reports a verdict per requirement, with the evidence for each. A single
+number would hide which requirements it rested on.
+
+## Part 8 — Troubleshooting
 
 | symptom | cause and fix |
 |---|---|
@@ -642,7 +625,7 @@ identifiers, and the text you see is fetched from the stored document. It cannot
 
 ---
 
-## Part 10 — Vocabulary
+## Part 9 — Vocabulary
 
 Several of these mean something narrower here than in ordinary use.
 
