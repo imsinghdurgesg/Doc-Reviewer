@@ -438,6 +438,156 @@ across several standards appears once rather than as several small problems.
 
 ---
 
+### Walkthrough — reviewing conditions on a newly uploaded standard
+
+The end-to-end procedure. Steps 1–4 are read-only and safe; step 5 writes, and step 6 is the only one
+that can remove a requirement from a review.
+
+#### Step 1 — Upload and index the standard
+
+Part 2. Wait for requirement extraction to finish. Conditions are extracted alongside requirements, so
+there is nothing to review until indexing completes.
+
+#### Step 2 — Open the condition list
+
+**Admin → Condition governance** → select the standard version. Each row is one condition found on one
+requirement:
+
+| column | meaning |
+|---|---|
+| Requirement | which requirement states the condition |
+| Condition text | the wording, verbatim from the standard |
+| **Extracted role** | what the model classified it as |
+| **Reviewed role** | what a human confirmed — blank until reviewed |
+| Provenance | which review batch decided it, if any |
+
+<!-- SCREENSHOT: docs/images/condition-list-unreviewed.png
+     The condition list for a freshly indexed standard: extracted roles populated, reviewed roles all
+     blank. This "before" state is what makes the review work visible; a fully-reviewed list does not
+     show that anything needed doing. -->
+![Conditions awaiting review](docs/images/condition-list-unreviewed.png)
+
+#### Step 3 — Classify each condition
+
+For each row, decide what the condition actually does:
+
+| role | meaning | can it exclude? |
+|---|---|---|
+| **SCOPE_GATE** | Genuinely limits which documents the requirement governs | **Yes**, if separately authorised |
+| **CONDITIONAL_OBLIGATION** | Describes *when* the duty triggers, not who it covers | No |
+| **IMPLEMENTATION_QUALIFIER** | Describes *how* to satisfy it | No |
+| **EXCEPTION_OR_WAIVER** | A carve-out from an otherwise applicable duty | No |
+| **TEMPORAL_OR_SEQUENCE** | Timing or ordering | No |
+| **UNKNOWN** | You cannot decide — routes to the policy owner queue | No |
+
+**The distinction that matters.** *"For cloud-hosted systems"* is a scope gate — it says which systems
+the rule covers. *"When a change is urgent"* is a conditional obligation — the rule still covers you, it
+just fires under certain circumstances.
+
+Treating the second as a scope gate would silently excuse a real requirement. Expect the model to
+over-predict SCOPE_GATE; in one reviewed corpus it proposed 117 scope gates and human review confirmed
+**zero**. Correcting it is the main work of this step.
+
+#### Step 4 — Record your decisions in a CSV
+
+One row per condition. Columns:
+
+```csv
+standard_version_id,requirement_set,requirement_id,condition_text,predicted_role,reviewer_role,reviewer_exclusion,reviewer_notes
+```
+
+| column | what to put |
+|---|---|
+| `standard_version_id` | the version you reviewed |
+| `requirement_set` | the requirement set version, e.g. `REQSET-V3` |
+| `requirement_id` | the requirement |
+| `condition_text` | the condition, verbatim |
+| `predicted_role` | what the model said |
+| `reviewer_role` | **your** decision, from the table above |
+| `reviewer_exclusion` | leave blank, or `AUTHORISE_EXCLUSION` — see step 6 |
+| `reviewer_notes` | why. This is what a future reader sees |
+
+What each `reviewer_role` value does:
+
+| value | result |
+|---|---|
+| a specific role | Recorded as **confirmed** with that role |
+| `UNKNOWN` | Routed to the **policy owner queue**; cannot exclude |
+| **blank** | **No row written.** The model's guess stands, unreviewed and unable to exclude |
+
+Blank is a safe default, not an omission — an unreviewed condition can never exclude anything.
+
+#### Step 5 — Import as a dry run first
+
+```bash
+infrastructure/scripts/import-condition-overrides.py reviewed.csv \
+  --batch CONDROLE-REVIEW-V1
+```
+
+Without `--apply` nothing is written; it prints the batch and a summary. **The importer refuses the
+whole file if any row is malformed** — a half-applied review would leave some requirements governed and
+others not, with nothing on screen to say which.
+
+Check the summary, especially the authorised-to-exclude count. Then:
+
+```bash
+infrastructure/scripts/import-condition-overrides.py reviewed.csv \
+  --batch CONDROLE-REVIEW-V1 --apply
+```
+
+#### Step 6 — Authorising an exclusion
+
+This is the only action that removes a requirement from a review, so it takes **two independent
+decisions** rather than one.
+
+Put `AUTHORISE_EXCLUSION` in `reviewer_exclusion`. It is accepted only when the same row is a
+**confirmed SCOPE_GATE**. Anything else is rejected with the line number.
+
+```csv
+...,SCOPE_GATE,AUTHORISE_EXCLUSION,"Standard covers cloud systems only; confirmed with the policy owner"
+```
+
+Why two decisions rather than one:
+
+> Confirming *what a clause does* is not the same as authorising it to *remove a control from a review*.
+> A reviewer may be certain a condition is a scope gate and still want a person to decide whether acting
+> on it is appropriate.
+
+The token is spelled out in full deliberately. A truthy `yes`, `y` or `1` would let a stray spreadsheet
+cell grant a control-removing power by accident.
+
+Even then, exclusion needs all four of:
+
+1. the condition is a **confirmed SCOPE_GATE**;
+2. exclusion is **explicitly authorised**;
+3. the requirement's scope names **specific document types**, not "all";
+4. the review ran with a **Document type** that clearly conflicts (Part 3, Step 2).
+
+Miss any one and the result is **"applicability review required"** — a visible question, never a silent
+exclusion.
+
+<!-- SCREENSHOT: docs/images/condition-list-reviewed.png
+     The same list after import: reviewed roles populated, provenance showing the batch id, and ideally
+     one row where the reviewer DISAGREED with the extracted role. That disagreement is the whole reason
+     this workflow exists. -->
+![Conditions after review](docs/images/condition-list-reviewed.png)
+
+#### Step 7 — Rerun and confirm
+
+Reruns are needed: existing reviews are frozen and keep the decisions in force when they ran (Part 8).
+
+Rerun with a **Document type** set, then check the coverage panel. A correctly excluded requirement
+appears under **Not applicable** with your reason; an unresolved one appears under **Applicability
+review required**.
+
+> **The panel is read-only.** Decisions are recorded by the importer, not edited in the browser. That is
+> deliberate: an exclusion needs a reviewed CSV with an author, notes and a batch id behind it, so a
+> control removed from a review can always be traced to a person and a rationale.
+
+---
+
+---
+
 ## Part 7 — What this version does not do
 
 Stated plainly, so you do not go looking:
@@ -574,7 +724,7 @@ filled, whereas a commented-out link is forgotten.
 
 ### Capture list
 
-Twenty-two images, in the order they appear. Each has a comment above it in the text saying what to frame
+Twenty-four images, in the order they appear. Each has a comment above it in the text saying what to frame
 and **why** — the *why* matters more than the framing, because a screenshot that misses the point it
 illustrates is worse than none at all.
 
@@ -602,6 +752,8 @@ illustrates is worse than none at all.
 | 18 | `admin-prompts.png` | 5 — keep the version chip in frame |
 | 19 | `admin-condition-governance.png` | 6 — ideally a row where the reviewer disagreed |
 | 20 | `admin-policy-owner-queue.png` | 6 — a grouped entry |
+| 21 | `condition-list-unreviewed.png` | 6 — the *before* state, reviewed roles blank |
+| 22 | `condition-list-reviewed.png` | 6 — *after*, with provenance and a disagreement |
 
 Four are worth extra care because the wrong crop inverts the meaning:
 
