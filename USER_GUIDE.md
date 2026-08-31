@@ -124,7 +124,59 @@ for example — the tool says so rather than reviewing it and reporting everythi
      document alongside, that contrast is worth more than either alone. -->
 ![Uploading a document for review](docs/images/upload-document.png)
 
-### Step 2 — Choose standards
+### Step 2 — Give it context (the step most worth doing)
+
+After upload, the tool reads your document and tells you what it thinks it is — shown as chips under
+**"This looks like:"**. Those are a guess, and you can correct them.
+
+<!-- SCREENSHOT: docs/images/context-inferred-chips.png
+     The "This looks like:" chips right after upload, BEFORE the reviewer edits anything, with the
+     "Use these" action visible. The guess-then-correct flow is the thing to capture; a screenshot of
+     the filled form does not show that the tool proposed anything. -->
+![Inferred document context](docs/images/context-inferred-chips.png)
+
+Four fields, all optional:
+
+| field | what it means | example |
+|---|---|---|
+| **Department** | Who owns this process | `IT Operations`, `Finance` |
+| **Standard family** | The body of rules you care about | `Change management`, `Access control` |
+| **Document type** | **What kind of document this is** | `Change management procedure`, `Vendor contract` |
+| **Assessment details** | Anything else in plain English | "This covers emergency changes only" |
+
+<!-- SCREENSHOT: docs/images/context-fields.png
+     The four fields filled in, with the recommended-standards list beside them so the reader can see
+     that editing the context changes the recommendations. -->
+![Setting assessment context](docs/images/context-fields.png)
+
+**Why bother?** Two distinct payoffs, and the second one is the one people miss.
+
+**It finds the right standard.** The context feeds standard recommendation directly. A document
+described as a *"Change management procedure"* in *"IT Operations"* matches a change-management
+standard far better than the same file with no description. Without context the tool has only the
+document's own wording to go on.
+
+**It unlocks the applicability decision — and this is the important one.**
+
+Many requirements are conditional: *"For vendor contracts, a right-to-audit clause must be
+included."* To decide whether that applies to your document, the tool must know **what kind of
+document it is**.
+
+That is exactly what **Document type** supplies. And here is the consequence:
+
+| Document type | what happens to a scoped requirement |
+|---|---|
+| **Left blank** | The tool cannot tell → **"Applicability review required"**. A person must decide |
+| **Filled in** | The tool compares it against the requirement's stated scope and can resolve it automatically |
+
+So leaving Document type blank does not make the tool assume the requirement applies — it makes it
+*ask you*. Every scoped requirement becomes a manual decision. Filling in one field can clear a whole
+column of open questions.
+
+> **This is the single highest-value field on the page.** It is optional, so it is easy to skip, and
+> skipping it is why an applicability column fills up with questions you then have to answer by hand.
+
+### Step 3 — Choose standards
 
 Select one or more standards from the library. You can filter by category and tag.
 
@@ -145,7 +197,7 @@ explicitly.
 up front**, telling you the count. It is not silently truncated — a review that quietly dropped a third of
 its requirements while reporting "completed" is worse than one that refuses.
 
-### Step 3 — Wait
+### Step 4 — Wait
 
 Each requirement is retrieved and evaluated separately. Progress shows which stage it is in and how many
 requirements are done.
@@ -156,7 +208,7 @@ A few hundred requirements takes several minutes. You can leave the page; the re
      A review mid-run with the stage and the evaluated/total counter visible. -->
 ![Comparison in progress](docs/images/comparison-progress.png)
 
-### Step 4 — Read the findings
+### Step 5 — Read the findings
 
 Each finding is one requirement, with:
 
@@ -176,7 +228,7 @@ much was actually checked.
      clause is visible, and at least one ALIGNED so the "aligned findings are kept" point is evident. -->
 ![Findings list](docs/images/findings-list.png)
 
-### Step 5 — Side-by-side view
+### Step 6 — Side-by-side view
 
 Click a finding to see the standard's requirement beside your document, with the cited passages
 highlighted. This is where you verify the tool rather than trust it.
@@ -186,7 +238,7 @@ highlighted. This is where you verify the tool rather than trust it.
      necessarily shows document text — use a document you are willing to publish. -->
 ![Side-by-side verification](docs/images/side-by-side.png)
 
-### Step 6 — Read the coverage panel
+### Step 7 — Read the coverage panel
 
 **This is the most important panel and the easiest to skip.** It answers: *was every requirement
 actually tested?*
@@ -397,6 +449,19 @@ Stated plainly, so you do not go looking:
 | **Shadow extraction sets** | Evaluated internally, never used in your reviews |
 | **Overall compliance score** | Not produced, by design |
 
+### Applicability review needs two things present
+
+The applicability column stays empty unless **both** hold:
+
+1. **You set a Document type** when running the review (Part 3, Step 2). Without it there is nothing to
+   compare a requirement's scope against.
+2. **The standard was indexed by a build that records applicability conditions.** Standards indexed by
+   earlier builds have no condition data stored, so every requirement reads as simply applying.
+
+If your environment shows an empty applicability panel and no scope questions anywhere, check the second
+condition with an administrator before assuming the feature is broken — it is the more likely cause, and
+re-uploading the standard does not fix it on its own.
+
 ### Known limitation in this release
 
 Some requirements in the current standards corpus may have an obligation — usually a deadline — that
@@ -435,6 +500,8 @@ identifiers, and the text you see is fetched from the stored document. It cannot
 | A requirement says "not evaluated" | Use **Retry** on it, or **Rerun** the review |
 | "Extraction review required" | A platform-side extraction gap. Retrying will not help; report it |
 | Standard uploaded but no requirements | Indexing may still be running, or the file parsed to no usable text |
+| Lots of "applicability review required" rows | **Document type** was left blank. Set it and rerun — see Part 3 Step 2 |
+| Wrong standard recommended | Add context before selecting. Department and document type change the ranking |
 | Cannot sign in | Not on the allowlist. Ask an administrator |
 | A standard has vanished from selection | Likely archived. Archived versions stay readable in old reviews |
 
@@ -507,7 +574,7 @@ filled, whereas a commented-out link is forgotten.
 
 ### Capture list
 
-Twenty images, in the order they appear. Each has a comment above it in the text saying what to frame
+Twenty-two images, in the order they appear. Each has a comment above it in the text saying what to frame
 and **why** — the *why* matters more than the framing, because a screenshot that misses the point it
 illustrates is worse than none at all.
 
@@ -520,6 +587,8 @@ illustrates is worse than none at all.
 | 5 | `bucket-layout.png` | 2 — drop-in upload location |
 | 6 | `indexing-progress.png` | 2 — mid-run, stage visible |
 | 7 | `upload-document.png` | 3 — a document ready to review |
+| 7a | `context-inferred-chips.png` | 3 — the *guess*, before any editing |
+| 7b | `context-fields.png` | 3 — context filled in, recommendations beside it |
 | 8 | `select-standard.png` | 3 — auto-selection score **and** runner-up |
 | 9 | `comparison-progress.png` | 3 — stage plus evaluated/total |
 | 10 | `findings-list.png` | 3 — a *mix* of verdicts |
