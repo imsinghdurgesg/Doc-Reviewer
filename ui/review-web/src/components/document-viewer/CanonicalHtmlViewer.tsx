@@ -251,23 +251,45 @@ export const CanonicalHtmlViewer = forwardRef<HTMLDivElement, CanonicalHtmlViewe
                     && node.charStart + node.text.length > spanStart,
                 );
 
-          if (suppressed && suppressed.nodeType === "TABLE" && overlapping.length > 0) {
-            // Every row the table's span covers, clipped to that row's own text. Recorded directly
-            // rather than through resolveHighlight, which resolves ONE node by id and cannot express
-            // a range spanning several.
-            for (const row of overlapping) {
-              const start = Math.max(0, spanStart! - row.charStart);
-              const end = Math.min(row.text.length, spanEnd! - row.charStart);
-              if (end <= start) {
-                continue;
+          if (suppressed && suppressed.nodeType === "TABLE") {
+            // MATCHED BY TEXT, not by character offset.
+            //
+            // An offset search put the highlight on the WRONG row: it landed on the preceding
+            // "Document ID: Classification" row while the requirement text sat in the row after. Node
+            // offsets are derived server-side from each node's earliest span, so a node whose spans do
+            // not resolve reports -1 and every arithmetic comparison against it is meaningless — the
+            // search was ordering nodes by a number half of them do not have.
+            //
+            // The table's own text IS its rows' text, so the visible row carrying the same text is the
+            // replacement, unambiguously and without arithmetic. Where the parser splits a table across
+            // several rows, each row containing part of the span's text is marked.
+            const spanText = item.text?.trim();
+            const rows = visibleNodes.filter((node) => {
+              if (node.nodeType !== "TABLE_ROW" || !spanText) {
+                return false;
               }
-              const existingRow = map.get(row.nodeId);
-              map.set(row.nodeId, {
-                start: existingRow ? Math.min(existingRow.start, start) : start,
-                end: existingRow ? Math.max(existingRow.end, end) : end,
-              });
+              // Either direction: a one-row table's row equals the span, and a multi-row table's rows
+              // are each a fragment of it.
+              return node.text.includes(spanText) || spanText.includes(node.text.trim());
+            });
+
+            if (rows.length > 0) {
+              for (const row of rows) {
+                const within = spanText ? row.text.indexOf(spanText) : -1;
+                // The span inside this row when it fits, otherwise the whole row — a row that is only
+                // a fragment of the span is entirely cited.
+                const start = within >= 0 ? within : 0;
+                const end = within >= 0 ? within + spanText!.length : row.text.length;
+                const existingRow = map.get(row.nodeId);
+                map.set(row.nodeId, {
+                  start: existingRow ? Math.min(existingRow.start, start) : start,
+                  end: existingRow ? Math.max(existingRow.end, end) : end,
+                });
+              }
+              continue;
             }
-            continue;
+            // No row carries the text. Falling through marks nothing, which is correct: a highlight
+            // placed on a guess is worse than an absent one, because it looks deliberate.
           }
 
           // A cell: re-measure against the single visible node containing its start.

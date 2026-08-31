@@ -326,6 +326,16 @@ describe("a span citing a whole table", () => {
    */
   const TABLE_NODES: CanonicalNodeView[] = [
     {
+      // A DECOY row before the cited table, mirroring the real document: an offset-based search put
+      // the highlight here instead, because derived offsets do not order these nodes reliably.
+      nodeId: "t-decoy-row",
+      nodeType: "TABLE_ROW",
+      sectionPath: ["Document control"],
+      page: 1, paragraph: 0, ordinal: 0,
+      text: "Document ID: Classification | Internal",
+      textHash: "sha256:decoy", charStart: 0, charEnd: 38,
+    },
+    {
       nodeId: "t-table",
       nodeType: "TABLE",
       sectionPath: ["1. Purpose"],
@@ -375,11 +385,14 @@ describe("a span citing a whole table", () => {
       />,
     );
 
-    // The suppressed TABLE is not rendered, so the mark has to appear on the ROWS instead. Asserting
-    // on marks rather than on text: the text renders either way, and rendering it unhighlighted is
-    // exactly the failure.
-    const marks = document.querySelectorAll("mark");
+    // Asserting WHICH row is marked, not merely that something is. The first attempt at this fix
+    // highlighted the preceding "Document ID: Classification" row, which satisfies "a mark exists"
+    // while pointing the reviewer at the wrong text — a confidently wrong highlight is worse than an
+    // absent one, so the test has to name the expected content.
+    const marks = Array.from(document.querySelectorAll("mark")).map((m) => m.textContent ?? "");
     expect(marks.length).toBeGreaterThan(0);
+    expect(marks.join(" ")).toContain("Governs change");
+    expect(marks.join(" ")).not.toContain("Classification");
   });
 
   it("does not render the suppressed table level twice", () => {
