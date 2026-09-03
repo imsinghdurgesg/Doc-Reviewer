@@ -1,0 +1,24 @@
+meta {
+  name: standard canonical
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/standards/{{standardVersionId}}/canonical
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.nodes: isDefined
+}
+
+docs {
+  The standard's parsed text, as the standard pane renders it.
+
+  If this 404s, the canonical artefact is missing from object storage and NOTHING will highlight on
+  the standard side regardless of the spans — a real case locally, where a version's artefact was
+  absent while its Mongo data looked complete.
+}

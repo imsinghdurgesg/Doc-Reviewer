@@ -1,0 +1,22 @@
+meta {
+  name: ai config
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/ai-config
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Provider, base URL, model aliases, and the three instruction boxes.
+
+  `apiKeySet` is a BOOLEAN. The key itself is encrypted at rest and never returned to the browser —
+  if you see a key value here, that is a defect worth reporting immediately.
+}

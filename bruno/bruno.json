@@ -1,0 +1,6 @@
+{
+  "version": "1",
+  "name": "Doc Reviewer",
+  "type": "collection",
+  "ignore": ["node_modules", ".git"]
+}

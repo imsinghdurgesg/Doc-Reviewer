@@ -1,0 +1,19 @@
+meta {
+  name: get standard
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/admin/standards/{{standardId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  One standard with all its versions and lifecycle states.
+}

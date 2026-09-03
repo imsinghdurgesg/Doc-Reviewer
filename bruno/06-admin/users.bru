@@ -1,0 +1,20 @@
+meta {
+  name: users
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/admin/users
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: any [200, 403]
+}
+
+docs {
+  The allowlist. ADMIN only — 403 for a STANDARDS_ADMIN is correct, not a bug. Curating the library
+  and deciding who may read the organisation's reviews are different authorities.
+}

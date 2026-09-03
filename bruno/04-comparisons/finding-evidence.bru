@@ -1,0 +1,23 @@
+meta {
+  name: finding evidence
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/comparisons/{{comparisonId}}/findings/{{findingId}}/evidence
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  The passages a verdict rests on, hydrated from storage — never from the model's response, so a
+  quotation cannot be invented.
+
+  standardEvidence is scoped to the finding's own standardVersionId; process evidence to the
+  compared document. Copy a findingId from the comparison above.
+}

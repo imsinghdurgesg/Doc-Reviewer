@@ -1,0 +1,45 @@
+meta {
+  name: review condition
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/admin/standards/versions/{{standardVersionId}}/conditions/review
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "requirementId": "{{requirementId}}",
+    "conditionText": "",
+    "reviewedRole": "CONDITIONAL_OBLIGATION",
+    "reviewStatus": "CONFIRMED",
+    "authoriseExclusion": false,
+    "reviewerNotes": "Validated via Bruno"
+  }
+}
+
+assert {
+  res.status: any [200, 400, 404, 409]
+}
+
+docs {
+  Records a condition decision. WRITES. STANDARDS_ADMIN or ADMIN.
+
+  conditionText must match a condition on that requirement VERBATIM — copy it from the GET above. A
+  typo returns 404 rather than creating an override that matches nothing and sits in the list
+  looking authoritative.
+
+  reviewerNotes is REQUIRED: a role change with no rationale is unreviewable later. 400 if blank.
+
+  THE GUARD WORTH TESTING: set reviewedRole SCOPE_GATE with authoriseExclusion true, confirm the
+  response shows canDriveNotApplicable true — then re-post with CONDITIONAL_OBLIGATION and
+  authoriseExclusion still true. It must come back FALSE. Exclusion authority is recomputed every
+  revision, never carried over, or a requirement would stay excluded on a classification that no
+  longer exists.
+
+  Not supplied by the caller, by design: the actor comes from the session, and the requirement set
+  is resolved server-side. An author a caller could set is not an audit trail.
+}

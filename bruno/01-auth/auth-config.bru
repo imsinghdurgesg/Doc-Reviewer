@@ -1,0 +1,24 @@
+meta {
+  name: auth config
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/auth/config
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.ssoEnabled: isDefined
+}
+
+docs {
+  PUBLIC — the only endpoint reachable without a credential. The SPA calls it before it has one, to
+  learn which sign-in mode the deployment uses.
+
+  Run this FIRST. A 200 here with a 401 everywhere else means the service is healthy and your
+  sessionCookie is missing or expired, which is a different problem from the API being down.
+}

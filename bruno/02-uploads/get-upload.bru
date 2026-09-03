@@ -1,0 +1,19 @@
+meta {
+  name: get upload
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/uploads/{{documentVersionId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Parse state and span count for one document.
+}

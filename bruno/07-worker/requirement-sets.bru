@@ -1,0 +1,23 @@
+meta {
+  name: requirement sets
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{workerUrl}}/internal/requirements/sets/{{standardVersionId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: any [200, 401]
+}
+
+docs {
+  INTERNAL. Needs X-Internal-Token, and on GCP an SSH tunnel — the worker is not published.
+  Add the header manually with the token from the container environment.
+
+  Extraction runs for a standard version, newest first. This is where you see whether a version has
+  several generations, and which one is promoted.
+}

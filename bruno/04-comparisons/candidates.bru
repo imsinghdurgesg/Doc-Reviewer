@@ -1,0 +1,32 @@
+meta {
+  name: candidates
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/comparisons/candidates/{{documentVersionId}}
+  body: none
+  auth: none
+}
+
+params:query {
+  ~department: 
+  ~standardFamily: 
+  ~documentType: 
+  ~guidance: 
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Standard recommendation for one document — the answer to "how do you check against 1000
+  documents". The document is embedded once and matched against indexed standards; this is a
+  similarity lookup, not a comparison per standard.
+
+  Set the query params to see context change the ranking. `message` is populated when NOTHING
+  clears the 0.35 relevance floor, which is the honest "no standard in this library corresponds to
+  your document" outcome rather than a wall of MISSING.
+}

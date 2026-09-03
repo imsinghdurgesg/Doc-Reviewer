@@ -1,0 +1,39 @@
+meta {
+  name: create comparison
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/comparisons
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "documentVersionId": "{{documentVersionId}}",
+    "standardVersionIds": ["{{standardVersionId}}"],
+    "department": "",
+    "standardFamily": "",
+    "documentType": "",
+    "comparisonGuidance": ""
+  }
+}
+
+assert {
+  res.status: eq 202
+}
+
+docs {
+  Starts a review. WRITES — it costs model calls.
+
+  Leave standardVersionIds EMPTY to exercise auto-selection: it picks the single best match and
+  refuses if nothing clears the relevance floor.
+
+  `documentType` is the highest-value field: without it, every scoped requirement becomes an open
+  applicability question a person must answer.
+
+  A run exceeding the requirement cap (500 by default) is rejected up front with the count, not
+  silently truncated.
+}

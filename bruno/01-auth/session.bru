@@ -1,0 +1,24 @@
+meta {
+  name: session
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/auth/session
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.email: isDefined
+}
+
+docs {
+  Who the cookie belongs to, and the roles it carries. If this 401s, re-copy sessionCookie from a
+  signed-in browser: everything else in the collection will fail the same way.
+
+  The roles here decide what the admin folder can do. STANDARDS_ADMIN can curate the library;
+  only ADMIN can manage users.
+}

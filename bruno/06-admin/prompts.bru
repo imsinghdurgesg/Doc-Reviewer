@@ -1,0 +1,24 @@
+meta {
+  name: prompts
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/admin/prompts
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Exactly what the models are told, with the version stamped on every result.
+
+  Read-only by design: these carry the rules that make a finding checkable — that a verdict must
+  cite evidence that exists, that PARTIAL must name which clause falls short. Confirm the comparison
+  prompt reads COMPARE-V2. V3 briefly let the model report that our own extraction was incomplete
+  and was withdrawn: evaluated requirements fell from 187 to 46.
+}

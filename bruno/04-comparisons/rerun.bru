@@ -1,0 +1,19 @@
+meta {
+  name: rerun
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/comparisons/{{comparisonId}}/rerun
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 202
+}
+
+docs {
+  Creates a NEW review with the same document and standards. WRITES. The original is untouched.
+}

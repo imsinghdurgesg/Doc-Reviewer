@@ -1,0 +1,23 @@
+meta {
+  name: retry requirement
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/comparisons/{{comparisonId}}/requirements/{{requirementId}}/retry
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: any [200, 409]
+}
+
+docs {
+  Re-evaluates ONE failed requirement in place. WRITES.
+
+  409 RETRY_NOT_APPLICABLE is correct, not a bug: an extraction-review result is refused because the
+  missing clause is upstream of the model, so retrying reaches the same wall. The amended finding
+  carries its own prompt and model versions, so a reader can see it was produced separately.
+}

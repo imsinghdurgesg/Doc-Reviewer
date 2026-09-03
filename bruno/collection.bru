@@ -1,0 +1,16 @@
+headers {
+  ~Content-Type: application/json
+}
+
+auth {
+  mode: none
+}
+
+script:pre-request {
+  // The API runs in SSO mode, so there is no password to send. Every request carries the session
+  // cookie from a signed-in browser instead, which also means these calls exercise exactly the path
+  // the real UI uses rather than a parallel one that might be authorized differently.
+  if (bru.getEnvVar("sessionCookie")) {
+    req.setHeader("Cookie", bru.getEnvVar("sessionCookie"));
+  }
+}

@@ -1,0 +1,22 @@
+meta {
+  name: policy owner queue
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/admin/standards/policy-owner-queue
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Conditions nobody has resolved, grouped by phrase across standards — the same open question is one
+  decision, not several small ones.
+
+  Nothing here blocks a review: a queued condition resolves to UNKNOWN and cannot exclude anything.
+}

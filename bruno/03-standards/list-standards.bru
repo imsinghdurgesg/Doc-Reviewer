@@ -1,0 +1,23 @@
+meta {
+  name: list standards
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/standards
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  The library. Readable by REVIEWER as well as admins — a reviewer must see which standards exist
+  to choose what to compare against.
+
+  Check `department`, `standardFamily`, `documentType`: these feed recommendation ranking, and
+  unset labels weaken it as the library grows.
+}

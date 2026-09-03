@@ -1,0 +1,21 @@
+meta {
+  name: list uploads
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/uploads
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Documents available to review. `readyForComparison` is the gate: a document with no evidence
+  spans cannot be compared, because retrieval would find nothing and every requirement would come
+  back MISSING — which reads as total non-compliance rather than "not parsed yet".
+}

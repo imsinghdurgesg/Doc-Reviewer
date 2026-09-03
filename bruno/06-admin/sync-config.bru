@@ -1,0 +1,19 @@
+meta {
+  name: sync config
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/admin/standards/sync
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Bucket and the five-minute sweep switch.
+}

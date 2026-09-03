@@ -1,0 +1,25 @@
+meta {
+  name: upload canonical
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/uploads/{{documentVersionId}}/canonical
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.nodes: isDefined
+}
+
+docs {
+  The parsed text the viewer renders, as nodes.
+
+  Worth inspecting for the table question: DOCX tables appear at three levels — TABLE, TABLE_ROW,
+  TABLE_CELL — all covering the same characters. The viewer suppresses TABLE and TABLE_CELL for
+  display, and a span citing a suppressed node is re-matched to its row by TEXT. `charStart` is
+  derived per node from its earliest span, so a node whose spans do not resolve reports -1.
+}

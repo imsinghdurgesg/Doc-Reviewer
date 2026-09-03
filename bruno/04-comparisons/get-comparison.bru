@@ -1,0 +1,28 @@
+meta {
+  name: get comparison
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/comparisons/{{comparisonId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+  res.body.publicId: isDefined
+}
+
+docs {
+  One review: findings, coverage, and the versions that produced it.
+
+  THE COVERAGE INVARIANTS to check by hand:
+    compared + notApplicable + notEvaluated              == totalRequirements
+    applicabilityConfirmed + applicabilityReviewRequired
+      + extractionReviewRequired                         == compared
+
+  `conclusionEligible` is a SUBSET of compared. An extraction-review result was measured and is
+  visible, but is excluded from the conclusion because a stated obligation went unassessed.
+}

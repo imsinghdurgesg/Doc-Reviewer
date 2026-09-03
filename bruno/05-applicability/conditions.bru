@@ -1,0 +1,31 @@
+meta {
+  name: conditions
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/standards/versions/{{standardVersionId}}/conditions
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Every applicability condition on one standard version, with what the model guessed, what a person
+  decided, and which governs.
+
+  `requirementSetVersion` null means the version has no published set — meaningfully different from
+  a set with no conditions, and the two used to be indistinguishable here.
+
+  In production this returns an EMPTY list: REQSET-V1 predates the field that stores conditions, so
+  there is nothing to review. That is the feature working, not failing.
+
+  Per row: extractedRole vs effectiveRole is the measurement. The extractor over-predicts
+  SCOPE_GATE heavily — 117 proposed, 0 confirmed in one reviewed corpus — and `reclassified` flags
+  the rows where review disagreed. `canDriveNotApplicable` is separate from the role: a confirmed
+  scope gate that nobody authorised still cannot exclude.
+}

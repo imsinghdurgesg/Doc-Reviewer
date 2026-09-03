@@ -1,0 +1,24 @@
+meta {
+  name: search standards
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/admin/standards/search
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 0
+  size: 20
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Paged view, for a library too large to list.
+}

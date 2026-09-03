@@ -1,0 +1,30 @@
+meta {
+  name: requirements in set
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{workerUrl}}/internal/requirements/sets/{{standardVersionId}}/{{requirementSetVersion}}
+  body: none
+  auth: none
+}
+
+params:query {
+  materialOnly: false
+}
+
+assert {
+  res.status: any [200, 401]
+}
+
+docs {
+  INTERNAL. Every requirement in one set.
+
+  materialOnly=false deliberately: an administrator judging extraction quality needs to see the
+  advisory requirements that were excluded on purpose, or the extractor looks like it missed them.
+
+  Note the identity — a requirement's _id is standardVersionId:requirementSetVersion:requirementId.
+  `requirementId` ALONE is not unique: it recurs across standards, 47 of 191 in one three-standard
+  comparison, which caused a real defect where one standard's finding overwrote another's.
+}

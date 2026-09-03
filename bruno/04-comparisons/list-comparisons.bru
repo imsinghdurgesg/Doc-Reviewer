@@ -1,0 +1,19 @@
+meta {
+  name: list comparisons
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/comparisons
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  History, scoped to the signed-in account. An administrator does not silently see everyone's.
+}
