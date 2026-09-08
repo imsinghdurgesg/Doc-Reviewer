@@ -39,22 +39,27 @@ class CandidatePresentationTest {
     @DisplayName("preselection is bounded independently of how many are shown")
     class Preselection {
 
-        @Test
-        @DisplayName("MAX_PRESELECTED_STANDARDS is 3")
-        void preselectionCapIsThree() throws IOException {
-            // Observed live: limit=20 pre-checked ALL twenty candidates. A reviewer who did not notice
-            // would start a comparison against twenty standards, reporting one gap twenty times under
-            // twenty policy names -- the exact failure MAX_AUTO_SELECTED_STANDARDS exists to prevent,
-            // reintroduced through the selection screen.
-            var declaration = Pattern
-                    .compile("MAX_PRESELECTED_STANDARDS\\s*=\\s*(\\d+)\\s*;")
-                    .matcher(source());
+    @Test
+    @DisplayName("preselection is read from configuration, not hard-coded")
+    void preselectionComesFromConfiguration() throws IOException {
+        // The constant this asserted on is GONE. Preselect and auto-select answered the same
+        // reviewer-facing question — how many standards are proposed — with two different numbers, 3
+        // and 1, so the screen could pre-check three while automatic selection took one and no setting
+        // explained the difference. Both now read one Admin value.
+        //
+        // What still needs protecting is that no literal creeps back: a hard-coded count would ignore
+        // the setting silently, and an administrator changing it would see no effect.
+        var source = Files.readString(CONTROLLER, StandardCharsets.UTF_8);
 
-            assertThat(declaration.find())
-                    .as("without this cap, `limit` preselects everything it shows")
-                    .isTrue();
-            assertThat(declaration.group(1)).isEqualTo("3");
-        }
+        assertThat(source)
+                .as("the preselect count must come from configuration")
+                .contains("reviewLimits.current().recommendedStandards()");
+
+        assertThat(source)
+                .as("the removed constant must not be reintroduced")
+                .doesNotContain("MAX_PRESELECTED_STANDARDS =");
+    }
+
 
         @Test
         @DisplayName("rank() is called with the preselection cap, not the display limit")

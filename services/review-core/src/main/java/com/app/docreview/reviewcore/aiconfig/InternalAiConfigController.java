@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalAiConfigController {
 
     private final AiProviderConfigService service;
+    private final ReviewLimitsConfigService reviewLimitsService;
     private final org.springframework.beans.factory.ObjectProvider<CloudSyncConfigService> syncConfig;
 
     /** The bucket review-core is actually writing to, or null when not on GCS. */
@@ -72,6 +73,28 @@ public class InternalAiConfigController {
              * is authoritative.
              */
             String gcsBucket) {
+    }
+
+    /**
+     * Review limits, for the worker. Architecture §10.5.
+     *
+     * <p>Fetched per job rather than read from the worker's own configuration, because the requirement
+     * cap is enforced in BOTH services and the two must agree. As separate environment variables they
+     * could drift, and the failure was silent in the worst direction: a comparison passed review-core's
+     * up-front check, then had requirements dropped by the worker's bound and reported as never
+     * attempted.
+     */
+    public record RuntimeReviewLimitsResponse(
+            int recommendedStandards,
+            int maxRequirementsPerComparison) {
+    }
+
+    @GetMapping("/review-limits")
+    public RuntimeReviewLimitsResponse reviewLimits() {
+        var limits = reviewLimitsService.current();
+        return new RuntimeReviewLimitsResponse(
+                limits.getRecommendedStandards(),
+                limits.getMaxRequirementsPerComparison());
     }
 
     @GetMapping("/ai-config")

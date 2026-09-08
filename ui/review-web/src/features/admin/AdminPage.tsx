@@ -11,6 +11,7 @@ import { useCurrentUser } from "@/auth/AuthGate";
 import { AiConfigPanel } from "@/features/admin/AiConfigPanel";
 import { CloudSyncPanel } from "@/features/admin/CloudSyncPanel";
 import { ConditionGovernancePanel } from "@/features/admin/ConditionGovernancePanel";
+import { ReviewLimitsPanel } from "@/features/admin/ReviewLimitsPanel";
 import { PromptsPanel } from "@/features/admin/PromptsPanel";
 import { UsersPanel } from "@/features/admin/UsersPanel";
 import { StandardsAdminPage } from "@/features/standards/StandardsAdminPage";
@@ -28,7 +29,7 @@ import { StandardsAdminPage } from "@/features/standards/StandardsAdminPage";
  * be quotable weeks later (§19.2).
  */
 
-type TabKey = "ai" | "prompts" | "library" | "conditions" | "cloud" | "users";
+type TabKey = "ai" | "prompts" | "library" | "conditions" | "cloud" | "users" | "limits";
 
 const TABS: ReadonlyArray<{
   key: TabKey;
@@ -60,6 +61,12 @@ const TABS: ReadonlyArray<{
     key: "conditions",
     label: "Applicability",
     detail: "Which conditions may exclude a control, and who decided",
+    icon: <RuleOutlinedIcon fontSize="small" />,
+  },
+  {
+    key: "limits",
+    label: "Review limits",
+    detail: "How many standards are recommended, and the requirement ceiling per review",
     icon: <RuleOutlinedIcon fontSize="small" />,
   },
   {
@@ -158,6 +165,7 @@ export function AdminPage() {
       {active === "library" && <StandardsAdminPage embedded />}
       {active === "prompts" && <PromptsPanel />}
       {active === "conditions" && <ConditionGovernancePanel />}
+      {active === "limits" && <ReviewLimitsPanel />}
       {active === "users" && <UsersPanel />}
       {active === "cloud" && <CloudSyncPanel />}
     </Box>

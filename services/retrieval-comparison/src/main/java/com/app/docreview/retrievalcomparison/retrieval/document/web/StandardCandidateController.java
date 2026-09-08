@@ -57,21 +57,16 @@ public class StandardCandidateController {
 
     private static final double LOW_CONFIDENCE = 0.45;
 
-    /**
-     * How many candidates arrive pre-checked on the selection screen. Architecture §15.1, §15.5.
-     *
-     * <p>Independent of how many are SHOWN: the screen offers breadth so a reviewer can include a
-     * lower-ranked standard, but preselects narrowly because every extra standard multiplies
-     * per-requirement model calls and reports one gap once per standard. Three, per the design's
-     * {@code maximum-preselected}.
-     *
-     * <p>Deliberately larger than {@code MAX_AUTO_SELECTED_STANDARDS} (1). Automatic selection
-     * substitutes for a choice nobody made and must be conservative; here a reviewer sees and confirms
-     * what was chosen.
-     */
-    private static final int MAX_PRESELECTED_STANDARDS = 3;
+    // How many candidates arrive pre-checked is now Admin-configured. It was a constant 3 here
+    // against 1 for automatic selection, and that split no longer holds: both answer the same
+    // reviewer-facing question — how many standards are proposed — so two numbers meant the
+    // screen could preselect three while auto-selection took one, with no setting explaining it.
+    //
+    // Breadth is unchanged: the screen still SHOWS more than it preselects, so a lower-ranked
+    // standard stays one click away. See ReviewLimitsConfig.recommendedStandards.
 
     private final StandardSelectionService selection;
+    private final com.app.docreview.retrievalcomparison.jobs.ReviewLimitsProvider reviewLimits;
     private final EvidenceSpanReader spanReader;
     private final DocumentContextModelGateway documentContext;
 
@@ -141,7 +136,7 @@ public class StandardCandidateController {
         // that MAX_AUTO_SELECTED_STANDARDS exists to prevent, reintroduced through the UI. The screen
         // should offer breadth and preselect narrowly: the reviewer adds, rather than removes.
         int shown = Math.min(Math.max(limit, 1), 50);
-        int preselected = Math.min(shown, MAX_PRESELECTED_STANDARDS);
+        int preselected = Math.min(shown, reviewLimits.current().recommendedStandards());
 
         var candidates = selection.rank(hits, preselected, context);
         if (candidates.size() > shown) {

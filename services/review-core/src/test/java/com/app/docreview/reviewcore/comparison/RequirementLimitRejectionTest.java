@@ -55,9 +55,18 @@ class RequirementLimitRejectionTest {
         documents = Mockito.mock(UploadedDocumentRepository.class);
         standardVersions = Mockito.mock(StandardVersionRepository.class);
         jobDispatcher = Mockito.mock(JobDispatcher.class);
-        service = new ComparisonService(comparisons, documents, standardVersions, jobDispatcher,
+        // The cap is now Admin-configured and read per request, so it is STUBBED rather than
+        // reflected onto a field. That also makes the test exercise the real path: a value that
+        // reaches the check the same way a saved setting does.
+        var limits = Mockito.mock(
+                com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfigService.class);
+        var config = new com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfig();
+        config.setMaxRequirementsPerComparison(LIMIT);
+        when(limits.current()).thenReturn(config);
+
+        service = new ComparisonService(comparisons, limits, documents, standardVersions,
+                jobDispatcher,
                 Mockito.mock(com.app.docreview.reviewcore.workflow.ComparisonFindingReader.class));
-        set(service, "maxRequirementsPerComparison", LIMIT);
 
         var document = Mockito.mock(UploadedDocument.class);
         when(document.readyForComparison()).thenReturn(true);

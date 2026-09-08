@@ -48,6 +48,7 @@ class ComparisonVisibilityTest {
         comparisons = Mockito.mock(ComparisonRepository.class);
         service = new ComparisonService(
                 comparisons,
+                defaultLimits(),
                 Mockito.mock(UploadedDocumentRepository.class),
                 Mockito.mock(StandardVersionRepository.class),
                 Mockito.mock(JobDispatcher.class),
@@ -150,5 +151,19 @@ class ComparisonVisibilityTest {
             Mockito.verify(comparisons, Mockito.never())
                     .findTop50ByCreatedByOrderByCreatedAtDesc(Mockito.anyString());
         }
+    }
+
+    /**
+     * A limits service returning the shipped defaults.
+     *
+     * <p>These tests are about visibility, not the cap, so the default is the honest stand-in: a mock
+     * returning zero would reject every comparison and fail these assertions for an unrelated reason.
+     */
+    private static com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfigService defaultLimits() {
+        var limits = Mockito.mock(
+                com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfigService.class);
+        Mockito.when(limits.current())
+                .thenReturn(new com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfig());
+        return limits;
     }
 }

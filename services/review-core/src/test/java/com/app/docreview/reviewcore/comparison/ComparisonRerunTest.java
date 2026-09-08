@@ -58,9 +58,8 @@ class ComparisonRerunTest {
         jobDispatcher = Mockito.mock(JobDispatcher.class);
         findingReader = Mockito.mock(
                 com.app.docreview.reviewcore.workflow.ComparisonFindingReader.class);
-        service = new ComparisonService(comparisons, documents, standardVersions, jobDispatcher,
+        service = new ComparisonService(comparisons, defaultLimits(), documents, standardVersions, jobDispatcher,
                 findingReader);
-        set(service, "maxRequirementsPerComparison", 500);
 
         var document = Mockito.mock(UploadedDocument.class);
         when(document.readyForComparison()).thenReturn(true);
@@ -68,16 +67,6 @@ class ComparisonRerunTest {
         when(comparisons.save(any())).thenAnswer(i -> i.getArgument(0));
         seedStandard("sv-1", 40);
         seedStandard("sv-2", 30);
-    }
-
-    private static void set(Object target, String field, Object value) {
-        try {
-            var f = target.getClass().getDeclaredField(field);
-            f.setAccessible(true);
-            f.set(target, value);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("fixture cannot set " + field, e);
-        }
     }
 
     private void seedStandard(String id, int materialCount) {
@@ -309,5 +298,20 @@ class ComparisonRerunTest {
                 .isEqualTo("1 of 2 requirements could not be evaluated.");
         assertThat(amended.getEvaluatedRequirements()).isEqualTo(1);
         assertThat(amended.getUnevaluatedRequirements()).containsExactly("CHG-11: Evaluation failed");
+    }
+
+    /**
+     * A limits service returning the shipped defaults.
+     *
+     * <p>These tests are not about the cap, so the default is the honest stand-in: a mock returning
+     * zero would reject every comparison and make unrelated assertions fail for a reason that has
+     * nothing to do with what they test.
+     */
+    private static com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfigService defaultLimits() {
+        var limits = org.mockito.Mockito.mock(
+                com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfigService.class);
+        org.mockito.Mockito.when(limits.current())
+                .thenReturn(new com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfig());
+        return limits;
     }
 }

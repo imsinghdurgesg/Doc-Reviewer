@@ -41,19 +41,19 @@ import java.util.UUID;
 public class ComparisonService {
 
     /**
-     * The worker's per-comparison requirement bound, mirrored so a selection can be refused BEFORE a
+     * The per-comparison requirement bound, read from Admin so a selection can be refused BEFORE a
      * run starts rather than truncated during one (§15.5).
      *
-     * <p>Must match {@code docreview.jobs.max-requirements-per-comparison} in retrieval-comparison.
-     * Two services holding one number is a real risk — if review-core's is higher, a selection it
-     * accepts is silently truncated by the worker — so both read the same environment variable
-     * (MAX_REQUIREMENTS_PER_COMPARISON) and default to the same value.
+     * <p><strong>One stored value, read by both services.</strong> This was an environment variable
+     * mirrored in retrieval-comparison, and two services holding one number is a real risk: if
+     * review-core's was higher, a selection it accepted was silently truncated by the worker and the
+     * dropped requirements were reported as never attempted. The worker now fetches this same row per
+     * job, so they cannot disagree.
      */
-    @org.springframework.beans.factory.annotation.Value(
-            "${docreview.comparison.max-requirements:${MAX_REQUIREMENTS_PER_COMPARISON:500}}")
-    private int maxRequirementsPerComparison;
 
     private final ComparisonRepository comparisons;
+    /** Admin-configured limits; read per request so a change applies without a restart. */
+    private final com.app.docreview.reviewcore.aiconfig.ReviewLimitsConfigService reviewLimits;
     private final UploadedDocumentRepository documents;
     private final StandardVersionRepository standardVersions;
     private final JobDispatcher jobDispatcher;
@@ -435,6 +435,7 @@ public class ComparisonService {
         // before the comparison starts, with the numbers, rather than handed a partial result that
         // looks complete. The truncation path still exists as a backstop and now records dropped
         // requirements as untested coverage rows — but a reviewer should never reach it.
+        int maxRequirementsPerComparison = reviewLimits.current().getMaxRequirementsPerComparison();
         if (totalRequirements > maxRequirementsPerComparison) {
             throw ApiException.badRequest("TOO_MANY_REQUIREMENTS",
                     "The selected standards contain " + totalRequirements

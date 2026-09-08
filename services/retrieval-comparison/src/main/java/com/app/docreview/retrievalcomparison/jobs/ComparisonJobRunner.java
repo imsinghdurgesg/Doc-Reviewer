@@ -67,6 +67,8 @@ public class ComparisonJobRunner {
     private final com.app.docreview.retrievalcomparison.comparison.application.CoverageLedgerService coverageLedgerService;
     /** Governed integrity decisions, consulted before any model call (§18.3). */
     private final com.app.docreview.retrievalcomparison.comparison.application.RequirementIntegrityLookup integrityRecords;
+    /** Admin-configured limits, fetched from review-core so both services enforce one number. */
+    private final ReviewLimitsProvider reviewLimits;
     private final VectorIndexingService indexingService;
     private final com.app.docreview.retrievalcomparison.retrieval.document.StandardSelectionService standardSelection;
     /**
@@ -84,29 +86,16 @@ public class ComparisonJobRunner {
      */
     private static final int PROFILE_SPAN_LIMIT = 40;
 
-    /**
-     * Standards auto-selected when the reviewer picked none: exactly the best-scoring one.
-     *
-     * <p>ONE, deliberately. Auto-selection is a fallback for a reviewer who did not choose, so it has
-     * to behave like the choice they would most likely have made — the single most relevant standard —
-     * not like a request to review against everything that scored close.
-     *
-     * <p>Three produced a measurably worse review: 118 findings instead of 65, with the same control
-     * (CHG-01) appearing three times from three standards. A reviewer cannot tell whether that is
-     * three real gaps or one gap counted thrice, and the duplication is an artefact of selection
-     * rather than anything about the document.
-     *
-     * <p>The near-tie gate in {@code StandardSelectionService} still applies and still cannot widen
-     * this: a runner-up within a few percent is reported as a REJECTED candidate with its score, so
-     * a close call stays visible and the reviewer can select it explicitly (§15.1).
-     */
-    private static final int MAX_AUTO_SELECTED_STANDARDS = 1;
+    // Standards auto-selected when the reviewer picked none is now Admin-configured; see
+    // ReviewLimitsConfig.recommendedStandards for the default of ONE and the measurement behind it:
+    // three standards derived from a common framework produced 118 findings where one produced 65,
+    // the same control three times over, with nothing to say whether that is three problems or one.
 
     private final WorkerJobRepository jobs;
     private final JobCallbackSender callbackSender;
 
-    @Value("${docreview.jobs.max-requirements-per-comparison:500}")
-    private int maxRequirements;
+    // The per-comparison requirement cap is Admin-configured and fetched per job; see
+    // ReviewLimitsProvider for why two services holding one number was a real defect.
 
     /**
      * Requirements evaluated at once WITHIN one comparison. Architecture §10.5.
@@ -260,7 +249,8 @@ public class ComparisonJobRunner {
             for (var requirement : loaded.dropped()) {
                 cappedReason.put(requirement.getRequirementId(),
                         "Not evaluated: this comparison spans more requirements than the "
-                                + maxRequirements + "-requirement limit for a single run. Compare "
+                                + reviewLimits.current().maxRequirementsPerComparison()
+                                + "-requirement limit for a single run. Compare "
                                 + "against fewer standards at once to cover it.");
             }
 
@@ -382,6 +372,9 @@ public class ComparisonJobRunner {
      * unbounded fan-out — the cap is logged when it bites, so a truncated run is never silent.
      */
     private LoadedRequirements loadRequirements(List<String> standardVersionIds) {
+        // Resolved HERE rather than threaded through three call sites: it is a per-job read either
+        // way, and a parameter would let one caller pass a different number than another.
+        int maxRequirements = reviewLimits.current().maxRequirementsPerComparison();
         List<StandardRequirementDocument> all = new ArrayList<>();
 
         for (String standardVersionId : standardVersionIds) {
@@ -569,7 +562,7 @@ public class ComparisonJobRunner {
                         inferred.documentType(), guidance)
                 : AssessmentContext.none();
 
-        return standardSelection.rank(hits, MAX_AUTO_SELECTED_STANDARDS, context).stream()
+        return standardSelection.rank(hits, reviewLimits.current().recommendedStandards(), context).stream()
                 .filter(com.app.docreview.contracts.retrieval.StandardCandidate::selected)
                 .map(com.app.docreview.contracts.retrieval.StandardCandidate::standardVersionId)
                 .toList();

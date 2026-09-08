@@ -32,24 +32,22 @@ class AutoSelectionLimitTest {
             "src/main/java/com/app/docreview/retrievalcomparison/jobs/ComparisonJobRunner.java");
 
     @Test
-    @DisplayName("the auto-selection limit is 1")
-    void limitIsOne() throws IOException {
-        assertThat(RUNNER)
-                .as("test must run from the module root to read the runner source")
-                .exists();
-
+    @DisplayName("the runner asks the configuration rather than hard-coding a count")
+    void countComesFromConfiguration() throws IOException {
+        // The constant this used to assert on is GONE: the count is Admin-configured, so pinning a
+        // literal here would now pin the wrong thing. What still needs protecting is that the runner
+        // does not reintroduce one — a hard-coded number would silently ignore the setting, and an
+        // administrator changing it would see no effect with nothing explaining why.
+        assertThat(RUNNER).as("test must run from the module root").exists();
         var source = Files.readString(RUNNER, StandardCharsets.UTF_8);
-        var declaration = Pattern
-                .compile("MAX_AUTO_SELECTED_STANDARDS\\s*=\\s*(\\d+)\\s*;")
-                .matcher(source);
 
-        assertThat(declaration.find())
-                .as("MAX_AUTO_SELECTED_STANDARDS must exist; auto-selection is unbounded without it")
-                .isTrue();
+        assertThat(source)
+                .as("the recommended-standard count must be read from configuration")
+                .contains("reviewLimits.current().recommendedStandards()");
 
-        assertThat(declaration.group(1))
-                .as("auto-selection must compare against exactly one standard: several report the "
-                        + "same gap once per standard, which reads as several distinct gaps")
-                .isEqualTo("1");
+        assertThat(Pattern.compile("rank\\(hits,\\s*\\d+\\s*,").matcher(source).find())
+                .as("a literal count passed to rank() would ignore the Admin setting")
+                .isFalse();
     }
+
 }
